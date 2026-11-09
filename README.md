@@ -1,0 +1,66 @@
+# OpenKeys Piano
+
+免费开源的电脑键盘钢琴。首版面向 Windows x64，使用 C++20、Qt 6 Widgets、FluidSynth 和 PortAudio；Linux 可用于开发和核心验证。
+
+支持双手演奏、88 键显示、键位编辑、延音与力度切换、EOP 播放、录制回放，以及 Windows 后台演奏。
+
+[界面预览](docs/preview.png)
+
+## 首次使用：导入音源
+
+**软件不附带音源，也不会自动下载。** 启动后点击 **导入音源**，选择自己准备的 `.sf2` 文件，等待复制和加载完成即可演奏。
+
+导入成功后，软件在应用数据目录保存副本，下次启动自动加载。你可以清理原下载文件。更换音源时，新音源成功加载后才会替换配置和清理旧应用副本，失败时继续保留旧音源。
+
+没有音源时可继续编辑键位和打开演奏文件，发声、播放和录制在导入并启动音频后可用。
+
+完整步骤、音源获取链接、解压方法和无声排查见 [音源导入教程](docs/soundfont.md)。主界面的 **导入教程** 使用同一份内嵌内容，断网也可阅读。
+
+## 演奏和录制
+
+- 左手：`Z X C V B N M` 从 C2 开始，`A S D F G H J` 从 C3 开始，`Q W E R T Y U` 从 C4 开始，数字行从 C5 开始；各行后续键继续上行。
+- 右手：小键盘 `1 2 3 4 5 6 7 8 9` 从 C4 按白键上行；方向键和导航键补充音区。
+- `Space`：按住延音；左 `Shift` 弱奏，右 `Shift` 强奏。普通键盘没有真实触键力度，这些操作调整 MIDI 力度。
+- 右键点击电脑按键可编辑音高、左右手或延音；**键位方案** 可以导入、导出或恢复默认布局。移调和八度只影响之后按下的音符。
+- **打开 EOP / 演奏** 支持 `.eop` 和 `.eopiano.json`，可播放、暂停、停止和调速。EOP 按文件中的音高和键位回放。
+- **录制 → 结束录制 → 保存演奏** 保存演奏事件，不录制麦克风；下次可重新打开播放。点击 **演奏示例** 再 **播放** 可试听。
+- Windows **后台演奏** 默认关闭；开启后可切换到其他窗口看谱，按键也会正常送达前台应用。`Ctrl+Alt+F12` 或 **立即止音** 会止音并关闭后台演奏；快捷键被占用时后台功能不可开启。
+
+编辑输入框、打开对话框或关闭前台演奏时会释放琴键。硬件按键冲突需要通过更改键位或使用支持更多同时按键的键盘解决。
+
+音频设置支持设备选择、64–2048 帧缓冲及 WASAPI 独占模式，独占打开失败会提示并退回共享。更换设备后可重新进入设置连接。状态栏的延迟来自驱动报告，不是按键到出声的实测值。
+
+## 构建和打包
+
+Linux 已安装开发库时：
+
+```sh
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel 4
+ctest --test-dir build --output-on-failure
+./build/openkeys
+```
+
+如果环境默认使用只读 ccache，可在首次配置时加 `-DCMAKE_CXX_COMPILER=/usr/bin/g++`。
+
+Windows 需要 Visual Studio 2022 C++ 工具集、CMake、vcpkg；制作安装包还需 NSIS：
+
+```powershell
+$env:VCPKG_ROOT = 'C:/dev/vcpkg'
+cmake --preset windows-release
+cmake --build --preset windows-release --parallel 4
+ctest --preset windows-release
+./tools/package_windows.ps1
+```
+
+构建和打包不需要音源文件。安装包携带导入教程和示例演奏数据，不包含 SF2/SF3。详细说明见 [构建文档](docs/build.md)。
+
+## 验证范围
+
+自动测试覆盖导入副本、持久化、重复导入、失败与取消恢复、音源替换、离线教程、录制、键位、采样渲染及 EOP 解析。音源测试使用原始生成的测试夹具，不代表特定第三方钢琴音源的听感合格。
+
+用户可自行用 `openkeys-soundfont-check` 生成 SF2 检查报告与试听 WAV；开发者可通过 `OPENKEYS_TEST_SOUNDFONT` 启用可选集成测试。未提供音源时明确跳过，不影响发布。说明见 [验证文档](docs/validation.md)。
+
+Windows Raw Input、WASAPI、Windows 10/11 安装和端到端延迟仍需实机验证；真实 EOP 曲库也尚未逐曲与原软件比对。首版不含外部 MIDI 键盘输入、VST 宿主、EOP 导出、跟弹评分或乐谱排版。EOP 支持范围见 [兼容性文档](docs/eop-compatibility.md)。
+
+代码采用 GPL-3.0-or-later，见 [LICENSE](LICENSE)。依赖见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。第三方音源由用户自行取得并导入。
