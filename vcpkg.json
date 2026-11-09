@@ -7,7 +7,7 @@
     {
       "name": "qtbase",
       "default-features": false,
-      "features": ["concurrent", "widgets", "testlib", "icu", "png", "windeployqt"]
+      "features": ["concurrent", "widgets", "testlib", "icu", "png"]
     },
     {"name": "fluidsynth", "default-features": false},
     {"name": "portaudio", "default-features": false}
