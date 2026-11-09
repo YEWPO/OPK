@@ -91,6 +91,12 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME app_smoke COMMAND openkeys --smoke-test)
   set_tests_properties(app_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 20)
+  if(WIN32 AND DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+    set(_test_dependencies "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
+    set_tests_properties(core soundfont_import audio ui soundfont_check real_soundfont app_smoke
+      PROPERTIES ENVIRONMENT_MODIFICATION
+      "PATH=path_list_prepend:${_test_dependencies}/bin;QT_PLUGIN_PATH=path_list_prepend:${_test_dependencies}/Qt6/plugins")
+  endif()
 endif()
 if(NOT WIN32)
   install(TARGETS openkeys openkeys-soundfont-check RUNTIME DESTINATION .)

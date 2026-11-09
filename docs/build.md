@@ -38,6 +38,8 @@ ctest --preset windows-release
 
 The vcpkg manifest pins registry baseline `ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0`. Dependencies still need to be installed or available in the build cache. The project never downloads instrument samples.
 
+The `windows-release` preset uses an overlay triplet that builds only Release dependency libraries. The `windows-dev` preset retains both Debug and Release libraries. CI saves compiled dependencies before running application tests and explicitly supplies Qt's plugin and DLL directories to the test processes.
+
 The packaging script builds and tests, deploys into a fresh staging directory, verifies no SF2/SF3 files are present, runs the staged executable, and produces NSIS/ZIP artifacts in `dist/`. Qt deployment and CMake install the required DLLs/platform plugins and dependency notices. The optional real-SF2 check is skipped when no user bank is configured.
 
 Windows CI builds the application, checks the staged contents and starts it with developer toolchains removed from PATH. Every push also creates an NSIS installer and a portable ZIP, available in the run's `OpenKeysPiano-Windows-installer` artifact. A manual workflow run with `build_installer=true` creates the same packages. Pull requests build and test without creating installers. No public release is published by the workflow.

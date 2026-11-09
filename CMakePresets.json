@@ -31,7 +31,10 @@
     {
       "name": "windows-release",
       "inherits": "windows-dev",
-      "binaryDir": "${sourceDir}/build-windows-release"
+      "binaryDir": "${sourceDir}/build-windows-release",
+      "cacheVariables": {
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/tools/triplets/release"
+      }
     }
   ],
   "buildPresets": [

@@ -37,10 +37,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cache compiled dependencies
+        id: dependency-cache
         uses: actions/cache@v4
         with:
           path: vcpkg-cache
-          key: vcpkg-win64-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-win64-${{ hashFiles('vcpkg.json', 'tools/triplets/**') }}
       - name: Bootstrap pinned vcpkg
         shell: pwsh
         run: |
@@ -50,9 +51,19 @@ jobs:
           if ($LASTEXITCODE) { throw 'vcpkg bootstrap failed' }
       - name: Configure
         run: cmake --preset windows-release
+      - name: Save compiled dependencies
+        if: steps.dependency-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: vcpkg-cache
+          key: vcpkg-win64-${{ hashFiles('vcpkg.json', 'tools/triplets/**') }}
       - name: Build
         run: cmake --build --preset windows-release --parallel 4
       - name: Test
+        env:
+          QT_DEBUG_PLUGINS: '1'
+          QT_LOGGING_TO_CONSOLE: '1'
+          QT_ASSUME_STDERR_HAS_CONSOLE: '1'
         run: ctest --preset windows-release
       - name: Stage application
         run: cmake --install build-windows-release --config Release --prefix dist/application
