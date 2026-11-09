@@ -1,0 +1,264 @@
+{
+  "format": "openkeys-recording",
+  "version": 1,
+  "title": "初次相遇 · OpenKeys Demo",
+  "author": "OpenKeys Piano",
+  "events": [
+    {
+      "timeUs": 0,
+      "type": "noteOn",
+      "note": 64,
+      "velocity": 95,
+      "hand": 1,
+      "key": 0
+    },
+    {
+      "timeUs": 0,
+      "type": "noteOn",
+      "note": 48,
+      "velocity": 65,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 0,
+      "type": "noteOn",
+      "note": 55,
+      "velocity": 65,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 420000,
+      "type": "noteOff",
+      "note": 64,
+      "velocity": 0,
+      "hand": 1,
+      "key": 0
+    },
+    {
+      "timeUs": 500000,
+      "type": "noteOn",
+      "note": 67,
+      "velocity": 95,
+      "hand": 1,
+      "key": 0
+    },
+    {
+      "timeUs": 900000,
+      "type": "noteOff",
+      "note": 48,
+      "velocity": 0,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 900000,
+      "type": "noteOff",
+      "note": 55,
+      "velocity": 0,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 920000,
+      "type": "noteOff",
+      "note": 67,
+      "velocity": 0,
+      "hand": 1,
+      "key": 0
+    },
+    {
+      "timeUs": 1000000,
+      "type": "noteOn",
+      "note": 72,
+      "velocity": 95,
+      "hand": 1,
+      "key": 0
+    },
+    {
+      "timeUs": 1000000,
+      "type": "noteOn",
+      "note": 52,
+      "velocity": 65,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 1000000,
+      "type": "noteOn",
+      "note": 59,
+      "velocity": 65,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 1420000,
+      "type": "noteOff",
+      "note": 72,
+      "velocity": 0,
+      "hand": 1,
+      "key": 0
+    },
+    {
+      "timeUs": 1500000,
+      "type": "noteOn",
+      "note": 71,
+      "velocity": 95,
+      "hand": 1,
+      "key": 0
+    },
+    {
+      "timeUs": 1900000,
+      "type": "noteOff",
+      "note": 52,
+      "velocity": 0,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 1900000,
+      "type": "noteOff",
+      "note": 59,
+      "velocity": 0,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 1920000,
+      "type": "noteOff",
+      "note": 71,
+      "velocity": 0,
+      "hand": 1,
+      "key": 0
+    },
+    {
+      "timeUs": 2000000,
+      "type": "noteOn",
+      "note": 69,
+      "velocity": 95,
+      "hand": 1,
+      "key": 0
+    },
+    {
+      "timeUs": 2000000,
+      "type": "noteOn",
+      "note": 45,
+      "velocity": 65,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 2000000,
+      "type": "noteOn",
+      "note": 52,
+      "velocity": 65,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 2420000,
+      "type": "noteOff",
+      "note": 69,
+      "velocity": 0,
+      "hand": 1,
+      "key": 0
+    },
+    {
+      "timeUs": 2500000,
+      "type": "noteOn",
+      "note": 67,
+      "velocity": 95,
+      "hand": 1,
+      "key": 0
+    },
+    {
+      "timeUs": 2900000,
+      "type": "noteOff",
+      "note": 45,
+      "velocity": 0,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 2900000,
+      "type": "noteOff",
+      "note": 52,
+      "velocity": 0,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 2920000,
+      "type": "noteOff",
+      "note": 67,
+      "velocity": 0,
+      "hand": 1,
+      "key": 0
+    },
+    {
+      "timeUs": 3000000,
+      "type": "noteOn",
+      "note": 65,
+      "velocity": 95,
+      "hand": 1,
+      "key": 0
+    },
+    {
+      "timeUs": 3000000,
+      "type": "noteOn",
+      "note": 53,
+      "velocity": 65,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 3000000,
+      "type": "noteOn",
+      "note": 60,
+      "velocity": 65,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 3420000,
+      "type": "noteOff",
+      "note": 65,
+      "velocity": 0,
+      "hand": 1,
+      "key": 0
+    },
+    {
+      "timeUs": 3500000,
+      "type": "noteOn",
+      "note": 64,
+      "velocity": 95,
+      "hand": 1,
+      "key": 0
+    },
+    {
+      "timeUs": 3900000,
+      "type": "noteOff",
+      "note": 53,
+      "velocity": 0,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 3900000,
+      "type": "noteOff",
+      "note": 60,
+      "velocity": 0,
+      "hand": 0,
+      "key": 0
+    },
+    {
+      "timeUs": 3920000,
+      "type": "noteOff",
+      "note": 64,
+      "velocity": 0,
+      "hand": 1,
+      "key": 0
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "openkeys-piano",
+  "version-string": "0.1.0",
+  "license": "GPL-3.0-or-later",
+  "builtin-baseline": "ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0",
+  "dependencies": [
+    {
+      "name": "qtbase",
+      "default-features": false,
+      "features": ["concurrent", "widgets", "testlib", "icu", "png", "windeployqt"]
+    },
+    {"name": "fluidsynth", "default-features": false},
+    {"name": "portaudio", "default-features": false}
+  ]
+}

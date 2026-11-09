@@ -1,0 +1,10 @@
+/build*/
+/out/
+/dist/
+__pycache__/
+*.user
+/.vcpkg/
+/vcpkg-cache/
+/vcpkg_installed/
+*.sf2
+*.sf3

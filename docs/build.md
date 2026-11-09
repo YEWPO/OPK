@@ -1,0 +1,62 @@
+# Build and packaging
+
+OpenKeys Piano does not download, embed or bundle soundfonts. Every application package includes the offline import guide; the user supplies an SF2 after installation. Building and packaging require no SF2 or network access to an instrument provider.
+
+## Linux development
+
+Ubuntu 24.04 dependencies:
+
+```sh
+sudo apt-get install cmake ninja-build g++ pkg-config qt6-base-dev libqt6concurrent6 libfluidsynth-dev portaudio19-dev
+cmake --preset linux-dev
+cmake --build --preset linux-dev --parallel 4
+ctest --preset linux-dev
+```
+
+Requires Qt 6.5+, a C++20 compiler, FluidSynth 2.3+ and PortAudio 19. Qt needs GB18030 support (ICU in the Windows manifest) for legacy Chinese EOP metadata.
+
+```sh
+./build/openkeys --inspect assets/demo.eopiano.json
+QT_QPA_PLATFORM=offscreen ./build/openkeys --screenshot /tmp/openkeys.png
+```
+
+`--inspect` validates a recording/EOP and prints JSON without initializing GUI/audio. `--smoke-test` and `--screenshot` avoid hardware initialization. `--soundfont PATH` follows the same managed import flow as the GUI; it is an explicit user import, not a default instrument.
+
+## Windows x64
+
+Install Visual Studio 2022 Desktop Development with C++, a Windows SDK, CMake 3.24+ and NSIS for installers. Dependencies use dynamic `x64-windows` libraries.
+
+```powershell
+git clone --branch 2025.06.13 https://github.com/microsoft/vcpkg C:/dev/vcpkg
+C:/dev/vcpkg/bootstrap-vcpkg.bat -disableMetrics
+$env:VCPKG_ROOT = 'C:/dev/vcpkg'
+cmake --preset windows-release
+cmake --build --preset windows-release --parallel 4
+ctest --preset windows-release
+./tools/package_windows.ps1
+```
+
+The vcpkg manifest pins registry baseline `ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0`. Dependencies still need to be installed or available in the build cache. The project never downloads instrument samples.
+
+The packaging script builds and tests, deploys into a fresh staging directory, verifies no SF2/SF3 files are present, runs the staged executable, and produces NSIS/ZIP artifacts in `dist/`. Qt deployment and CMake install the required DLLs/platform plugins and dependency notices. The optional real-SF2 check is skipped when no user bank is configured.
+
+Windows CI builds the application, checks the staged contents and starts it with developer toolchains removed from PATH. Every push also creates an NSIS installer and a portable ZIP, available in the run's `OpenKeysPiano-Windows-installer` artifact. A manual workflow run with `build_installer=true` creates the same packages. Pull requests build and test without creating installers. No public release is published by the workflow.
+
+## Imported instrument storage
+
+SF2 copies live in `QStandardPaths::AppLocalDataLocation/soundfonts/` (`LOCALAPPDATA` on Windows). Their filenames are SHA-256 hashes; `current.json` atomically records the current hash and display name. It is updated only after copying and sampler loading succeed.
+
+Copies and sampler loading run on a worker thread. Failed/cancelled imports remove their temporary/new files while preserving the previous configuration and source files. After a successful switch and release of the old sampler, the old owned copy is removed. A cleanup failure does not invalidate the newly imported bank. External source paths are never deleted.
+
+Startup loads only the explicitly imported bank identified by this metadata. There is no bundled/development-directory fallback. Old `QSettings` external paths are migration hints requiring an explicit import. Sample-rate changes reload the managed copy without importing it again.
+
+The import guide is embedded as a Qt resource in the UI library and is also installed as `docs/soundfont.md`. It works without network access, a working directory or the source checkout.
+
+## Optional soundfont diagnostics
+
+```sh
+./build/openkeys-soundfont-check --soundfont /path/to/piano.sf2 --output build/soundfont-check
+OPENKEYS_TEST_SOUNDFONT=/path/to/piano.sf2 ctest --test-dir build -R '^real_soundfont$' --output-on-failure
+```
+
+The standalone tool opens no audio device or network connection. It tests 44.1/48 kHz, A0–C8 at three velocities, sustain/release, and an embedded demo; it generates PCM16 WAV previews and a JSON report including the bank's hash and invalid/clipped-sample counters. This does not measure physical output latency or certify third-party sound quality. Unset integration-test input is marked skipped, not passed.
