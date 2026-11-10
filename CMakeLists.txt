@@ -113,6 +113,8 @@ if(WIN32)
     POST_EXCLUDE_REGEXES ".*[Ww]indows[/\\\\][Ss]ystem32.*"
     RUNTIME DESTINATION .)
   qt_generate_deploy_app_script(TARGET openkeys OUTPUT_SCRIPT qt_deploy NO_UNSUPPORTED_PLATFORM_ERROR)
+  # Executables and DLLs are installed at the package root.
+  install(CODE [[set(QT_DEPLOY_BIN_DIR ".")]])
   install(SCRIPT ${qt_deploy})
   if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
     install(DIRECTORY "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/" DESTINATION licenses/dependencies

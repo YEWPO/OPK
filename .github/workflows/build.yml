@@ -66,7 +66,7 @@ jobs:
           QT_ASSUME_STDERR_HAS_CONSOLE: '1'
         run: ctest --preset windows-release
       - name: Stage application
-        run: cmake --install build-windows-release --config Release --prefix dist/application
+        run: cmake --install build-windows-release --config Release --prefix "${{ github.workspace }}/dist/application"
       - name: Verify application has no soundfonts and starts without developer DLLs
         shell: pwsh
         run: |
@@ -75,7 +75,11 @@ jobs:
           $originalPath = $env:PATH
           $env:PATH = "$env:SystemRoot/System32;$env:SystemRoot"
           try {
-            $process = Start-Process ./dist/application/openkeys.exe -ArgumentList '--smoke-test' -PassThru -Wait
+            $process = Start-Process ./dist/application/openkeys.exe -ArgumentList '--smoke-test' -PassThru
+            if (-not $process.WaitForExit(30000)) {
+              $process.Kill($true)
+              throw 'Staged executable timed out after 30 seconds'
+            }
             if ($process.ExitCode) { throw "Staged executable failed: $($process.ExitCode)" }
           } finally { $env:PATH = $originalPath }
       - name: Upload application (import tutorial included)

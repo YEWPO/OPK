@@ -14,7 +14,11 @@ try {
     if ($LASTEXITCODE) { throw "Staging failed." }
     $banks = Get-ChildItem $staging -Recurse -File | Where-Object { $_.Extension -in '.sf2', '.sf3' }
     if ($banks) { throw "The application package must not contain soundfonts." }
-    $process = Start-Process -FilePath (Join-Path $staging 'openkeys.exe') -ArgumentList '--smoke-test' -PassThru -Wait
+    $process = Start-Process -FilePath (Join-Path $staging 'openkeys.exe') -ArgumentList '--smoke-test' -PassThru
+    if (-not $process.WaitForExit(30000)) {
+        $process.Kill($true)
+        throw "Staged application timed out after 30 seconds."
+    }
     if ($process.ExitCode) { throw "Staged application did not start: $($process.ExitCode)" }
     cpack --config build-windows-release/CPackConfig.cmake -C Release -B dist
     if ($LASTEXITCODE) { throw "Packaging failed. Check that NSIS is installed." }
