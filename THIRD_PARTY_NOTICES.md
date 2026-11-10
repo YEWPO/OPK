@@ -11,3 +11,5 @@ No instrument soundfonts or samples are bundled with the application. Users obta
 EOP binary-layout research: https://github.com/emizuki/eop2midi/blob/main/specification.md . The C++ parser is an independent implementation; no Go source is included. EOP/Everyone Piano names identify compatibility with third-party file formats, without affiliation.
 
 The sampler fixture in tests/fixtures.h is generated from a mathematical sine wave, is used only for automated tests, and is not a bundled piano instrument. The included demo is an original event recording, not an audio sample library.
+
+The Windows installer template is adapted from CMake CPack (Kitware and contributors), BSD-3-Clause. The full notice is in `cmake/installer/CMake-LICENSE.rst`.

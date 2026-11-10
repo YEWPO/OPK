@@ -6,6 +6,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $installer = (Resolve-Path $InstallerPath).Path
+$scripts = @(Get-ChildItem (Split-Path $installer) -Filter '*.nsi' -Recurse -File)
+if ($scripts.Count -ne 1) { throw 'Expected exactly one generated NSIS script.' }
+$script = Get-Content -LiteralPath $scripts[0].FullName -Raw -Encoding UTF8
+if ([regex]::Matches($script, '(?m)^\s*Page custom InstallOptionsPage SaveShortcutOptions').Count -ne 1 -or
+    $script -match '!insertmacro MUI_PAGE_STARTMENU' -or
+    [regex]::Matches($script, '!insertmacro MUI_LANGUAGE').Count -ne 1 -or
+    $script -notmatch '!insertmacro MUI_LANGUAGE "SimpChinese"' -or
+    $script -notmatch '创建桌面快捷方式' -or $script -notmatch '创建开始菜单快捷方式') {
+    throw 'Generated installer must have one Chinese shortcut page and no Start Menu folder page.'
+}
 $installRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('OpenKeys 安装 test ' + [guid]::NewGuid().ToString('N'))
 $desktopRoots = @(
     [Environment]::GetFolderPath('DesktopDirectory'),
@@ -91,37 +101,48 @@ function Assert-Shortcut([string]$Path, [string]$Target) {
     Write-Host "Verified shortcut: $Path -> $actualTarget"
 }
 
-$originalPath = $env:PATH
-$installedLinks = @()
-$uninstaller = Join-Path $installRoot 'Uninstall.exe'
-try {
-    # NSIS requires /D to be last; the remainder is the directory, without quotes.
-    Invoke-CheckedProcess $installer "/S /D=$installRoot"
-    $executable = Join-Path $installRoot 'openkeys.exe'
-    if (-not (Test-Path $executable -PathType Leaf)) { throw 'Installed application is missing.' }
-    $desktop = @($desktopLinks | Where-Object { Test-Path $_ })
-    $startMenu = @(Find-StartMenuLinks)
-    if ($desktop.Count -ne 1) { throw "Expected one desktop shortcut, found $($desktop.Count)." }
-    if ($startMenu.Count -ne 1) { throw "Expected one Start Menu shortcut, found $($startMenu.Count)." }
-    $installedLinks = @($desktop) + @($startMenu)
-    foreach ($link in $installedLinks) { Assert-Shortcut $link $executable }
-    $env:PATH = "$env:SystemRoot/System32;$env:SystemRoot"
-    Invoke-CheckedProcess $executable '--smoke-test'
-    foreach ($link in $installedLinks) { Invoke-CheckedProcess $link '--smoke-test' }
-} finally {
-    $env:PATH = $originalPath
-    if (Test-Path $uninstaller) {
-        Invoke-CheckedProcess $uninstaller '/S'
-        # NSIS launches its temporary uninstaller; the original process may exit first.
-        for ($attempt = 0; $attempt -lt 120; ++$attempt) {
-            $remainingLinks = @($installedLinks | Where-Object { Test-Path $_ })
-            if (-not (Test-Path $uninstaller) -and -not $remainingLinks) { break }
-            Start-Sleep -Milliseconds 500
-        }
-        if ((Test-Path $uninstaller) -or (Test-Path (Join-Path $installRoot 'openkeys.exe')) -or
-            ($installedLinks | Where-Object { Test-Path $_ })) {
-            throw 'Uninstall did not remove the application and its shortcuts.'
+$cases = @(
+    @{ Options = ''; Desktop = 1; Menu = 1 },
+    @{ Options = '/DESKTOP=1 /STARTMENU=1'; Desktop = 1; Menu = 1 },
+    @{ Options = '/DESKTOP=0 /STARTMENU=1'; Desktop = 0; Menu = 1 },
+    @{ Options = '/DESKTOP=1 /STARTMENU=0'; Desktop = 1; Menu = 0 },
+    @{ Options = '/DESKTOP=0 /STARTMENU=0'; Desktop = 0; Menu = 0 }
+)
+foreach ($case in $cases) {
+    $originalPath = $env:PATH
+    $installedLinks = @()
+    $uninstaller = Join-Path $installRoot 'Uninstall.exe'
+    try {
+        # NSIS requires /D to be last; the remainder is the directory, without quotes.
+        Invoke-CheckedProcess $installer "/S $($case.Options) /D=$installRoot"
+        $executable = Join-Path $installRoot 'openkeys.exe'
+        if (-not (Test-Path $executable -PathType Leaf)) { throw 'Installed application is missing.' }
+        $desktop = @($desktopLinks | Where-Object { Test-Path $_ })
+        $startMenu = @(Find-StartMenuLinks)
+        if ($desktop.Count -ne $case.Desktop) { throw "Unexpected desktop shortcut count: $($desktop.Count)." }
+        if ($startMenu.Count -ne $case.Menu) { throw "Unexpected Start Menu shortcut count: $($startMenu.Count)." }
+        $installedLinks = @($desktop) + @($startMenu)
+        foreach ($link in $installedLinks) { Assert-Shortcut $link $executable }
+        $env:PATH = "$env:SystemRoot/System32;$env:SystemRoot"
+        Invoke-CheckedProcess $executable '--smoke-test'
+        foreach ($link in $installedLinks) { Invoke-CheckedProcess $link '--smoke-test' }
+    } finally {
+        $env:PATH = $originalPath
+        if (Test-Path $uninstaller) {
+            Invoke-CheckedProcess $uninstaller '/S'
+            # NSIS launches its temporary uninstaller; the original process may exit first.
+            for ($attempt = 0; $attempt -lt 120; ++$attempt) {
+                $remainingLinks = @($installedLinks | Where-Object { Test-Path $_ })
+                if (-not (Test-Path $uninstaller) -and -not $remainingLinks) { break }
+                Start-Sleep -Milliseconds 500
+            }
+            if ((Test-Path $uninstaller) -or (Test-Path (Join-Path $installRoot 'openkeys.exe')) -or
+                ($installedLinks | Where-Object { Test-Path $_ })) {
+                throw 'Uninstall did not remove the application and its shortcuts.'
+            }
         }
     }
+
+Write-Host "Verified shortcut options: $($case.Options)"
 }
-Write-Host 'Installer verified: Unicode/spaced path, default desktop/Start Menu links, startup and uninstall.'
+Write-Host 'Installer verified: Unicode/spaced path, defaults and all shortcut combinations, startup and uninstall.'

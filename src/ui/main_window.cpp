@@ -187,6 +187,8 @@ MainWindow::MainWindow(bool diagnostic, const QString &soundfontDirectory)
             statusBar()->showMessage(QStringLiteral("键位设置读取失败，已使用默认布局：%1").arg(e.what()),
                                      20000);
         }
+    keyboard_.keymap.transpose = 0;
+    keyboard_.keymap.octave = {0, 0};
     config_.frames = settings_.value("audio/frames", 256).toInt();
     config_.exclusive = settings_.value("audio/exclusive", false).toBool();
     buildUi();
@@ -437,22 +439,36 @@ void MainWindow::buildUi() {
     connect(speed_, &QDoubleSpinBox::valueChanged, this, [this](double value) { audio_.setSpeed(value); });
     auto *performance = new QHBoxLayout;
     auto *keyGroup = new QGroupBox("演奏设置");
-    auto *keyRow = new QGridLayout(keyGroup);
+    auto *keyRow = new QVBoxLayout(keyGroup);
+    const auto field = [](const QString &name, QWidget *control) {
+        auto *group = new QWidget;
+        auto *layout = new QHBoxLayout(group);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(8);
+        layout->setSizeConstraint(QLayout::SetFixedSize);
+        layout->addWidget(new QLabel(name));
+        control->setFixedWidth(control->sizeHint().width());
+        layout->addWidget(control);
+        return group;
+    };
+    auto *topRow = new QHBoxLayout;
+    auto *handsRow = new QHBoxLayout;
+    topRow->setSpacing(20);
+    handsRow->setSpacing(20);
+    keyRow->addLayout(topRow);
+    keyRow->addLayout(handsRow);
     keyGroup->setToolTip("演奏调名和音区只影响之后按下的现场琴键；文件回放使用文件音高。");
-    keyRow->addWidget(new QLabel("演奏调名"), 0, 0);
     auto *transpose = performanceSpin(-12, 12, keyboard_.keymap.transpose, PerformanceSpin::Key);
     transpose->setObjectName("transpose");
-    keyRow->addWidget(transpose, 0, 1);
+    topRow->addWidget(field("演奏调名", transpose));
+    topRow->addStretch();
     for (int hand = 0; hand < 2; ++hand) {
-        const int column = hand * 4;
-        keyRow->addWidget(new QLabel(hand == 0 ? "左手音区" : "右手音区"), 1, column);
         auto *octave = performanceSpin(-3, 3, keyboard_.keymap.octave[size_t(hand)], PerformanceSpin::Octave);
         octave->setObjectName(hand == 0 ? "leftOctave" : "rightOctave");
-        keyRow->addWidget(octave, 1, column + 1);
-        keyRow->addWidget(new QLabel("力度"), 1, column + 2);
+        handsRow->addWidget(field(hand == 0 ? "左手音区" : "右手音区", octave));
         auto *velocity = performanceSpin(1, 127, keyboard_.keymap.velocity[size_t(hand)], PerformanceSpin::Number);
         velocity->setObjectName(hand == 0 ? "leftVelocity" : "rightVelocity");
-        keyRow->addWidget(velocity, 1, column + 3);
+        handsRow->addWidget(field("力度", velocity));
         connect(octave, &QSpinBox::valueChanged, this, [this, hand](int value) {
             keyboard_.keymap.octave[size_t(hand)] = value;
             updateProfile();
@@ -467,7 +483,8 @@ void MainWindow::buildUi() {
         updateProfile();
     });
     auto *profile = button("键位方案");
-    keyRow->addWidget(profile, 0, 7);
+    handsRow->addStretch();
+    topRow->addWidget(profile);
     connect(profile, &QPushButton::clicked, this, [this] { profileSettings(); });
     performance->addWidget(keyGroup, 1);
     root->addLayout(performance);

@@ -17,6 +17,8 @@
 #include <QSpinBox>
 #include <QStyleOptionSpinBox>
 #include <QStatusBar>
+#include <QStandardPaths>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTextBrowser>
@@ -61,6 +63,58 @@ KeyboardView *keyboardView(MainWindow &window) {
 class UiTests : public QObject {
     Q_OBJECT
   private slots:
+    void startupDefaults() {
+        const auto directory = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+        QVERIFY(QDir().mkpath(directory));
+        const auto path = directory + "/keyboard.json";
+        QFile existing(path);
+        const bool hadProfile = existing.exists();
+        QByteArray previous;
+        if (hadProfile) {
+            QVERIFY(existing.open(QIODevice::ReadOnly));
+            previous = existing.readAll();
+            existing.close();
+        }
+        const auto restore = qScopeGuard([&] {
+            if (hadProfile) {
+                QFile file(path);
+                if (file.open(QIODevice::WriteOnly))
+                    file.write(previous);
+            } else {
+                QFile::remove(path);
+            }
+        });
+        auto map = Keymap::defaults();
+        map.transpose = 3;
+        map.octave = {-1, 2};
+        map.velocity = {65, 90};
+        map.bindings[30].note = 61;
+        map.save(path);
+        {
+            MainWindow window(true);
+            const auto *view = keyboardView(window);
+            QCOMPARE(view->map.transpose, 0);
+            QCOMPARE(view->map.octave[0], 0);
+            QCOMPARE(view->map.octave[1], 0);
+            QCOMPARE(view->map.velocity[0], 65);
+            QCOMPARE(view->map.bindings.at(30).note, 61);
+            QCOMPARE(window.findChild<QSpinBox *>("transpose")->text(), QStringLiteral("C"));
+            QCOMPARE(window.findChild<QSpinBox *>("leftOctave")->text(), QStringLiteral("原音区"));
+            QCOMPARE(window.findChild<QSpinBox *>("rightOctave")->text(), QStringLiteral("原音区"));
+        }
+        QFile::remove(path);
+        MainWindow firstLaunch(true);
+        QCOMPARE(keyboardView(firstLaunch)->map.transpose, 0);
+        QCOMPARE(keyboardView(firstLaunch)->map.octave[0], 0);
+        {
+            QFile broken(path);
+            QVERIFY(broken.open(QIODevice::WriteOnly));
+            broken.write("invalid JSON");
+        }
+        MainWindow corruptProfile(true);
+        QCOMPARE(keyboardView(corruptProfile)->map.transpose, 0);
+        QCOMPARE(keyboardView(corruptProfile)->map.octave[1], 0);
+    }
     void mouseKeyboardAndPianoGlissando() {
         KeyboardView view;
         view.resize(1100, 500);
@@ -290,6 +344,13 @@ class UiTests : public QObject {
         window.show();
         window.resize(980, 760);
         QApplication::processEvents();
+        for (const char *name : {"transpose", "leftOctave", "rightOctave", "leftVelocity", "rightVelocity"}) {
+            auto *control = window.findChild<QSpinBox *>(QLatin1String(name));
+            QVERIFY(control);
+            const auto labels = control->parentWidget()->findChildren<QLabel *>();
+            QCOMPARE(labels.size(), 1);
+            QCOMPARE(control->geometry().left() - labels[0]->geometry().right() - 1, 8);
+        }
         auto *transpose = window.findChild<QSpinBox *>("transpose");
         QVERIFY(transpose);
         transpose->setValue(0);
@@ -442,6 +503,9 @@ class UiTests : public QObject {
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
     QTemporaryDir settings;
+#ifndef Q_OS_WIN
+    qputenv("XDG_CONFIG_HOME", settings.path().toUtf8());
+#endif
     QCoreApplication::setOrganizationName("OpenKeysTests");
     QCoreApplication::setApplicationName("UI");
     QSettings::setDefaultFormat(QSettings::IniFormat);

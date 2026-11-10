@@ -109,6 +109,7 @@ if(NOT WIN32)
   install(TARGETS openkeys openkeys-soundfont-check RUNTIME DESTINATION .)
 endif()
 install(FILES LICENSE THIRD_PARTY_NOTICES.md DESTINATION licenses)
+install(FILES cmake/installer/CMake-LICENSE.rst DESTINATION licenses)
 install(DIRECTORY licenses/ DESTINATION licenses)
 install(FILES README.md DESTINATION .)
 install(DIRECTORY docs/ DESTINATION docs FILES_MATCHING PATTERN "*.md" PATTERN "*.png")
@@ -146,21 +147,10 @@ if(WIN32)
   set(_installer_icon "${CMAKE_SOURCE_DIR}/assets/icons/openkeys.ico")
   set(CPACK_NSIS_MUI_ICON "${_installer_icon}")
   set(CPACK_NSIS_MUI_UNIICON "${_installer_icon}")
-  # CPack's desktop checkbox lives on its optional PATH page; PATH stays off by default.
-  set(CPACK_NSIS_MODIFY_PATH ON)
-  set(CPACK_NSIS_DEFINES [[
-Unicode true
-!define MUI_CUSTOMFUNCTION_GUIINIT OpenKeysInitializeOptions
-Function OpenKeysInitializeOptions
-  WriteINIStr "$PLUGINSDIR\NSIS.InstallOptions.ini" "Field 5" "State" "1"
-FunctionEnd
-]])
-  # GUI initialization is skipped in /S mode, so apply the same default there.
-  set(CPACK_NSIS_EXTRA_PREINSTALL_COMMANDS [[
-  IfSilent 0 openkeys_options_ready
-    WriteINIStr "$PLUGINSDIR\NSIS.InstallOptions.ini" "Field 5" "State" "1"
-  openkeys_options_ready:
-]])
+  # Repository-owned Chinese shortcut page, without PATH or Start Menu folder pages.
+  list(PREPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/installer")
+  set(CPACK_NSIS_MODIFY_PATH OFF)
+  set(CPACK_NSIS_DEFINES "Unicode true")
   set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
 else()
   set(CPACK_GENERATOR TGZ)
