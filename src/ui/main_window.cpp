@@ -15,20 +15,26 @@
 #include <QFormLayout>
 #include <QFrame>
 #include <QGroupBox>
+#include <QGridLayout>
+#include <QKeyEvent>
+#include <QLineEdit>
 #include <QIcon>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPointer>
+#include <QPainter>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
+#include <QStyleOptionSpinBox>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QTextBrowser>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 #include <QtConcurrent/QtConcurrentRun>
 #include <algorithm>
 static void initializeGuide() {
@@ -58,6 +64,86 @@ QSpinBox *spin(int lo, int hi, int value) {
     s->setValue(value);
     s->setKeyboardTracking(false);
     return s;
+}
+template <typename Base> class ArrowOnlySpin : public Base {
+  public:
+    ArrowOnlySpin() {
+        this->lineEdit()->setReadOnly(true);
+        this->lineEdit()->installEventFilter(this);
+        this->setFocusPolicy(Qt::NoFocus);
+        this->setWrapping(false);
+        this->setStyleSheet(R"(
+            QSpinBox,QDoubleSpinBox {padding-right:28px;}
+            QSpinBox::up-button,QDoubleSpinBox::up-button {width:24px;background:#354761;}
+            QSpinBox::down-button,QDoubleSpinBox::down-button {width:24px;background:#354761;}
+            QSpinBox::up-button:hover,QDoubleSpinBox::up-button:hover,
+            QSpinBox::down-button:hover,QDoubleSpinBox::down-button:hover {background:#4c6688;}
+            QSpinBox::up-arrow,QDoubleSpinBox::up-arrow,
+            QSpinBox::down-arrow,QDoubleSpinBox::down-arrow {image:none;}
+        )");
+    }
+
+  protected:
+    void keyPressEvent(QKeyEvent *event) override { event->ignore(); }
+    void wheelEvent(QWheelEvent *event) override { event->ignore(); }
+    void paintEvent(QPaintEvent *event) override {
+        Base::paintEvent(event);
+        QStyleOptionSpinBox option;
+        this->initStyleOption(&option);
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(Qt::NoPen);
+        for (bool up : {true, false}) {
+            const auto part = up ? QStyle::SC_SpinBoxUp : QStyle::SC_SpinBoxDown;
+            const auto center = this->style()->subControlRect(QStyle::CC_SpinBox, &option, part, this).center();
+            const bool enabled = option.stepEnabled & (up ? QAbstractSpinBox::StepUpEnabled
+                                                         : QAbstractSpinBox::StepDownEnabled);
+            painter.setBrush(QColor(enabled ? "#e6edf7" : "#758295"));
+            const double x = center.x(), y = center.y(), direction = up ? -1. : 1.;
+            painter.drawPolygon(QPolygonF{QPointF(x, y + direction * 3),
+                                          QPointF(x - 4, y - direction * 2),
+                                          QPointF(x + 4, y - direction * 2)});
+        }
+    }
+    bool eventFilter(QObject *object, QEvent *event) override {
+        if (object == this->lineEdit() &&
+            (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease ||
+             event->type() == QEvent::Wheel))
+            return true;
+        return Base::eventFilter(object, event);
+    }
+};
+class PerformanceSpin : public ArrowOnlySpin<QSpinBox> {
+  public:
+    enum Display { Number, Key, Octave };
+    explicit PerformanceSpin(Display display) : display_(display) {}
+
+  protected:
+    QString textFromValue(int value) const override {
+        if (display_ == Key) {
+            static const char *names[] = {"C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"};
+            const int index = (value % 12 + 12) % 12;
+            const int octave = (value - index) / 12;
+            const auto name = QString::fromLatin1(names[index]);
+            return octave == 0 ? name : name + (octave > 0 ? QStringLiteral("（高 1 个八度）")
+                                                          : QStringLiteral("（低 1 个八度）"));
+        }
+        if (display_ == Octave)
+            return value == 0 ? QStringLiteral("原音区")
+                              : QStringLiteral("%1 %2 个八度")
+                                    .arg(value > 0 ? QStringLiteral("升高") : QStringLiteral("降低"))
+                                    .arg(std::abs(value));
+        return QSpinBox::textFromValue(value);
+    }
+
+  private:
+    Display display_;
+};
+QSpinBox *performanceSpin(int lo, int hi, int value, PerformanceSpin::Display display) {
+    auto *control = new PerformanceSpin(display);
+    control->setRange(lo, hi);
+    control->setValue(value);
+    return control;
 }
 void applyVisual(KeyboardView *view, const Event &e, bool playback) {
     auto &notes = playback ? view->playbackNotes : view->liveNotes;
@@ -298,7 +384,8 @@ void MainWindow::buildUi() {
     row->addWidget(save);
     row->addStretch();
     row->addWidget(new QLabel("速度"));
-    speed_ = new QDoubleSpinBox;
+    speed_ = new ArrowOnlySpin<QDoubleSpinBox>;
+    speed_->setObjectName("playbackSpeed");
     speed_->setRange(.25, 2);
     speed_->setSingleStep(.05);
     speed_->setValue(1);
@@ -350,21 +437,22 @@ void MainWindow::buildUi() {
     connect(speed_, &QDoubleSpinBox::valueChanged, this, [this](double value) { audio_.setSpeed(value); });
     auto *performance = new QHBoxLayout;
     auto *keyGroup = new QGroupBox("演奏设置");
-    auto *keyRow = new QHBoxLayout(keyGroup);
-    keyRow->addWidget(new QLabel("移调"));
-    auto *transpose = spin(-12, 12, keyboard_.keymap.transpose);
+    auto *keyRow = new QGridLayout(keyGroup);
+    keyGroup->setToolTip("演奏调名和音区只影响之后按下的现场琴键；文件回放使用文件音高。");
+    keyRow->addWidget(new QLabel("演奏调名"), 0, 0);
+    auto *transpose = performanceSpin(-12, 12, keyboard_.keymap.transpose, PerformanceSpin::Key);
     transpose->setObjectName("transpose");
-    keyRow->addWidget(transpose);
+    keyRow->addWidget(transpose, 0, 1);
     for (int hand = 0; hand < 2; ++hand) {
-        keyRow->addSpacing(12);
-        keyRow->addWidget(new QLabel(hand == 0 ? "左手八度" : "右手八度"));
-        auto *octave = spin(-3, 3, keyboard_.keymap.octave[size_t(hand)]);
+        const int column = hand * 4;
+        keyRow->addWidget(new QLabel(hand == 0 ? "左手音区" : "右手音区"), 1, column);
+        auto *octave = performanceSpin(-3, 3, keyboard_.keymap.octave[size_t(hand)], PerformanceSpin::Octave);
         octave->setObjectName(hand == 0 ? "leftOctave" : "rightOctave");
-        keyRow->addWidget(octave);
-        keyRow->addWidget(new QLabel("力度"));
-        auto *velocity = spin(1, 127, keyboard_.keymap.velocity[size_t(hand)]);
+        keyRow->addWidget(octave, 1, column + 1);
+        keyRow->addWidget(new QLabel("力度"), 1, column + 2);
+        auto *velocity = performanceSpin(1, 127, keyboard_.keymap.velocity[size_t(hand)], PerformanceSpin::Number);
         velocity->setObjectName(hand == 0 ? "leftVelocity" : "rightVelocity");
-        keyRow->addWidget(velocity);
+        keyRow->addWidget(velocity, 1, column + 3);
         connect(octave, &QSpinBox::valueChanged, this, [this, hand](int value) {
             keyboard_.keymap.octave[size_t(hand)] = value;
             updateProfile();
@@ -379,7 +467,7 @@ void MainWindow::buildUi() {
         updateProfile();
     });
     auto *profile = button("键位方案");
-    keyRow->addWidget(profile);
+    keyRow->addWidget(profile, 0, 7);
     connect(profile, &QPushButton::clicked, this, [this] { profileSettings(); });
     performance->addWidget(keyGroup, 1);
     root->addLayout(performance);

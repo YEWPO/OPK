@@ -191,13 +191,16 @@ class CoreTests : public QObject {
             for (bool zeroSection : {false, true}) {
                 if (version == 301 && zeroSection)
                     continue;
-                for (int offset : {0, 9, -3}) {
+                for (const auto &[offset, expected] : std::array<std::pair<int32_t, int>, 6>{
+                         {{0, 60}, {9, 63}, {-3, 63}, {12, 60},
+                          {std::numeric_limits<int32_t>::min(), 68},
+                          {std::numeric_limits<int32_t>::max(), 65}}}) {
                     auto data = fixture::decodedEop(version, false, zeroSection);
                     fixture::u32(data, 0x1bc, uint32_t(offset));
                     const auto song = parseEop(fixture::encode(data));
                     QCOMPARE(song.events.size(), size_t(2));
-                    QCOMPARE(song.events[0].note, 60 - offset);
-                    QCOMPARE(song.events[1].note, 60 - offset);
+                    QCOMPARE(song.events[0].note, expected);
+                    QCOMPARE(song.events[1].note, expected);
                     QCOMPARE(song.events[0].kind, Kind::NoteOn);
                     QCOMPARE(song.events[1].kind, Kind::NoteOff);
                     QCOMPARE(song.events[0].key, 30);
@@ -209,8 +212,8 @@ class CoreTests : public QObject {
                     saveRecording(path, song);
                     const auto restored = readSong(path);
                     QCOMPARE(restored.events.size(), song.events.size());
-                    QCOMPARE(restored.events[0].note, 60 - offset);
-                    QCOMPARE(restored.events[1].note, 60 - offset);
+                    QCOMPARE(restored.events[0].note, expected);
+                    QCOMPARE(restored.events[1].note, expected);
                 }
             }
         }
@@ -226,34 +229,36 @@ class CoreTests : public QObject {
                 fixture::u32(data, second, 3);
                 auto song = parseEop(fixture::encode(data));
                 QCOMPARE(song.events.size(), size_t(4));
-                QCOMPARE(song.events[0].note, 51);
-                QCOMPARE(song.events[1].note, 61);
-                QCOMPARE(song.events[2].note, 51);
-                QCOMPARE(song.events[3].note, 61);
+                QCOMPARE(song.events[0].note, 63);
+                QCOMPARE(song.events[1].note, 73);
+                QCOMPARE(song.events[2].note, 63);
+                QCOMPARE(song.events[3].note, 73);
                 // Distinct base pitches become the same pitch after per-layer offsets.
-                fixture::u32(data, second, 13);
+                fixture::u32(data, 0x1bc, 3);
+                fixture::u32(data, second, 7);
                 song = parseEop(fixture::encode(data));
                 QCOMPARE(song.events.size(), size_t(2));
-                QCOMPARE(song.events[0].note, 51);
-                QCOMPARE(song.events[1].note, 51);
+                QCOMPARE(song.events[0].note, 69);
+                QCOMPARE(song.events[1].note, 69);
             }
         }
     }
     void eopOffsetBounds() {
         for (int version : {201, 301}) {
-            for (int offset : {60, -67}) {
-                auto data = fixture::decodedEop(version);
-                fixture::u32(data, 0x1bc, uint32_t(offset));
-                auto song = parseEop(fixture::encode(data));
-                QCOMPARE(song.events[0].note, 60 - offset);
-                QCOMPARE(song.events[1].note, 60 - offset);
-            }
-            for (int32_t offset : {61, -68, std::numeric_limits<int32_t>::min(),
-                                   std::numeric_limits<int32_t>::max()}) {
-                auto data = fixture::decodedEop(version);
-                fixture::u32(data, 0x1bc, uint32_t(offset));
-                QVERIFY_EXCEPTION_THROWN(parseEop(fixture::encode(data)), FileError);
-            }
+            auto data = fixture::decodedEop(version);
+            fixture::u32(data, 0x1bc, 9);
+            const qsizetype note = 0x1bc + 28 + 34;
+            fixture::u16(data, note, 124);
+            auto song = parseEop(fixture::encode(data));
+            QCOMPARE(song.events[0].note, 127);
+            QCOMPARE(song.events[1].note, 127);
+            fixture::u16(data, note, 125);
+            QVERIFY_EXCEPTION_THROWN(parseEop(fixture::encode(data)), FileError);
+            fixture::u16(data, note, 0);
+            fixture::u32(data, 0x1bc, 0);
+            song = parseEop(fixture::encode(data));
+            QCOMPARE(song.events[0].note, 0);
+            QCOMPARE(song.events[1].note, 0);
         }
         auto data = fixture::decodedEop(200);
         fixture::u32(data, 0x1b8, 9);

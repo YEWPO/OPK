@@ -3,6 +3,8 @@
 #include "ui/keyboard_view.h"
 #include "ui/main_window.h"
 #include <QApplication>
+#include <QClipboard>
+#include <QDoubleSpinBox>
 #include <QDialog>
 #include <QDir>
 #include <QFile>
@@ -13,15 +15,26 @@
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QStyleOptionSpinBox>
 #include <QStatusBar>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTextBrowser>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 #include <algorithm>
 using namespace piano;
 namespace {
+void clickStep(QAbstractSpinBox *control, bool up) {
+    QStyleOptionSpinBox option;
+    option.initFrom(control);
+    option.buttonSymbols = QAbstractSpinBox::UpDownArrows;
+    option.stepEnabled = QAbstractSpinBox::StepUpEnabled | QAbstractSpinBox::StepDownEnabled;
+    const auto part = up ? QStyle::SC_SpinBoxUp : QStyle::SC_SpinBoxDown;
+    const auto rect = control->style()->subControlRect(QStyle::CC_SpinBox, &option, part, control);
+    QTest::mouseClick(control, Qt::LeftButton, Qt::NoModifier, rect.center());
+}
 QPoint computerKeyPoint(const KeyboardView &view, uint16_t code) {
     const auto &keys = physicalKeys();
     const auto key = std::find_if(keys.begin(), keys.end(), [code](const auto &k) { return k.code == code; });
@@ -271,6 +284,99 @@ class UiTests : public QObject {
             QVERIFY(window.findChild<QLabel *>("soundfontStatus")->text().contains("导入音源后开始演奏"));
         }
         settings.remove("soundfont");
+    }
+    void performanceControls() {
+        MainWindow window(true);
+        window.show();
+        window.resize(980, 760);
+        QApplication::processEvents();
+        auto *transpose = window.findChild<QSpinBox *>("transpose");
+        QVERIFY(transpose);
+        transpose->setValue(0);
+        QCOMPARE(transpose->text(), QStringLiteral("C"));
+        for (int n = 0; n < 3; ++n)
+            clickStep(transpose, true);
+        QCOMPARE(transpose->value(), 3);
+        QCOMPARE(transpose->text(), QStringLiteral("Eb"));
+        QCOMPARE(keyboardView(window)->map.transpose, 3);
+        transpose->setValue(-1);
+        QCOMPARE(transpose->text(), QStringLiteral("B（低 1 个八度）"));
+        transpose->setValue(12);
+        QCOMPARE(transpose->text(), QStringLiteral("C（高 1 个八度）"));
+        clickStep(transpose, true);
+        QCOMPARE(transpose->value(), 12);
+        transpose->setValue(-12);
+        QCOMPARE(transpose->text(), QStringLiteral("C（低 1 个八度）"));
+        clickStep(transpose, false);
+        QCOMPARE(transpose->value(), -12);
+        for (const char *name : {"leftOctave", "rightOctave"}) {
+            auto *control = window.findChild<QSpinBox *>(QLatin1String(name));
+            QVERIFY(control);
+            control->setValue(0);
+            QCOMPARE(control->text(), QStringLiteral("原音区"));
+            clickStep(control, true);
+            QCOMPARE(control->text(), QStringLiteral("升高 1 个八度"));
+            clickStep(control, false);
+            clickStep(control, false);
+            QCOMPARE(control->text(), QStringLiteral("降低 1 个八度"));
+        }
+        for (auto *control : window.findChildren<QAbstractSpinBox *>()) {
+            auto *editor = control->findChild<QLineEdit *>();
+            QVERIFY(editor);
+            QVERIFY(editor->isReadOnly());
+            const auto before = control->text();
+            QTest::keyClicks(editor, "99");
+            QApplication::clipboard()->setText("88");
+            editor->selectAll();
+            QTest::keyClick(editor, Qt::Key_V, Qt::ControlModifier);
+            for (auto key : {Qt::Key_Up, Qt::Key_Down, Qt::Key_PageUp, Qt::Key_PageDown}) {
+                QTest::keyClick(editor, key);
+                QTest::keyClick(control, key);
+            }
+            for (QWidget *target : {static_cast<QWidget *>(control), static_cast<QWidget *>(editor)}) {
+                QWheelEvent wheel(QPointF(5, 5), target->mapToGlobal(QPoint(5, 5)), {},
+                                  QPoint(0, 120), Qt::NoButton, Qt::NoModifier,
+                                  Qt::NoScrollPhase, false);
+                QApplication::sendEvent(target, &wheel);
+            }
+            QCOMPARE(control->text(), before);
+        }
+        for (const char *name : {"leftVelocity", "rightVelocity"}) {
+            auto *control = window.findChild<QSpinBox *>(QLatin1String(name));
+            QVERIFY(control);
+            control->setValue(80);
+            clickStep(control, true);
+            QCOMPARE(control->value(), 81);
+            clickStep(control, false);
+            QCOMPARE(control->value(), 80);
+        }
+        auto *speed = window.findChild<QDoubleSpinBox *>("playbackSpeed");
+        QVERIFY(speed);
+        clickStep(speed, true);
+        QCOMPARE(speed->value(), 1.05);
+        clickStep(speed, false);
+        QCOMPARE(speed->value(), 1.0);
+        // Resetting a profile must refresh the formatted controls as well as the map.
+        QTimer::singleShot(0, [] {
+            auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            QVERIFY(dialog);
+            for (auto *candidate : dialog->findChildren<QPushButton *>())
+                if (candidate->text() == QStringLiteral("恢复默认双手布局")) {
+                    candidate->click();
+                    return;
+                }
+            dialog->reject();
+            QFAIL("Missing reset button");
+        });
+        for (auto *candidate : window.findChildren<QPushButton *>())
+            if (candidate->text() == QStringLiteral("键位方案")) {
+                candidate->click();
+                break;
+            }
+        QCOMPARE(transpose->text(), QStringLiteral("C"));
+        QCOMPARE(window.findChild<QSpinBox *>("leftOctave")->text(), QStringLiteral("原音区"));
+        QCOMPARE(window.findChild<QSpinBox *>("rightOctave")->text(), QStringLiteral("原音区"));
+        QCOMPARE(keyboardView(window)->map.transpose, 0);
     }
     void importEopAndChangeTranspose() {
         QTemporaryDir dir;
