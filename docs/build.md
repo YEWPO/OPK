@@ -44,6 +44,18 @@ The packaging script builds and tests, deploys into a fresh staging directory, v
 
 Windows CI builds the application, checks the staged contents and starts it with developer toolchains removed from PATH. Every push also creates an NSIS installer and a portable ZIP, available in the run's `OpenKeysPiano-Windows-installer` artifact. A manual workflow run with `build_installer=true` creates the same packages. Pull requests build and test without creating installers. No public release is published by the workflow.
 
+The NSIS install-options page defaults to creating the **OpenKeys Piano** desktop shortcut; users can uncheck it. PATH modification remains off by default. Silent installation uses the same desktop-shortcut default. Desktop and Start Menu shortcuts target `openkeys.exe` at the installation root, and uninstall removes them. CI runs `tools/verify_windows_installer.ps1` on its disposable Windows worker to install silently to a Unicode path containing spaces, inspect both shortcuts, start the installed executable without developer PATH entries, and verify uninstall cleanup. Do not run that script on a workstation with an existing OpenKeys installation.
+
+### Application icon assets
+
+`assets/icons/openkeys.svg` is the editable icon source. Its PNG exports and multi-resolution `openkeys.ico` are checked in, so ordinary builds need no image conversion tools. Qt embeds the PNG sizes; the Windows executable resource and NSIS installer/uninstaller use the ICO. To regenerate after editing the SVG, install `rsvg-convert` (librsvg) and Python Pillow, then run:
+
+```sh
+python3 tools/generate_icons.py
+```
+
+The exported sizes are 16, 24, 32, 48, 64, 128 and 256 pixels. Keep every export synchronized with the SVG.
+
 ## Imported instrument storage
 
 SF2 copies live in `QStandardPaths::AppLocalDataLocation/soundfonts/` (`LOCALAPPDATA` on Windows). Their filenames are SHA-256 hashes; `current.json` atomically records the current hash and display name. It is updated only after copying and sampler loading succeed.

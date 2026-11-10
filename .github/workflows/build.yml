@@ -90,6 +90,13 @@ jobs:
       - name: Build installer and ZIP
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.build_installer)
         run: cpack --config build-windows-release/CPackConfig.cmake -C Release -B dist
+      - name: Verify installed shortcuts and uninstall
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.build_installer)
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem dist/OpenKeysPiano-*.exe)
+          if ($installers.Count -ne 1) { throw 'Expected exactly one NSIS installer.' }
+          ./tools/verify_windows_installer.ps1 -InstallerPath $installers[0].FullName
       - name: Upload installer and ZIP
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.build_installer)
         uses: actions/upload-artifact@v4

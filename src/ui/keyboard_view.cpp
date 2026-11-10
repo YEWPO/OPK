@@ -2,6 +2,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <algorithm>
+#include <utility>
 namespace piano {
 namespace {
 const QColor ink("#e6edf5"), muted("#8493a8"), left("#67d9ba"), right("#b6a0ff"), play("#ffc875");
@@ -18,6 +19,7 @@ QColor noteColor(const std::array<std::array<int, 128>, 3> &notes, int n) {
 } // namespace
 KeyboardView::KeyboardView(QWidget *parent) : QWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
+    setMouseTracking(true);
     setMinimumSize(minimumSizeHint());
 }
 QRectF KeyboardView::keyRect(const PhysicalKey &key) const {
@@ -36,17 +38,25 @@ void KeyboardView::paintEvent(QPaintEvent *) {
     p.setFont(QFont("sans-serif", 9));
     p.drawText(
         QRectF(16, 7, width() - 32, 20),
-        "电脑键盘  /  右键编辑键位                          左手 · 绿色     右手 · 紫色     回放 · 金色");
+        "电脑键盘  /  左键点击或拖动演奏 · 右键编辑          左手 · 绿色     右手 · 紫色     回放 · 金色");
     for (const auto &key : physicalKeys()) {
         const auto r = keyRect(key);
         const auto it = map.bindings.find(key.code);
-        const bool live = liveKeys.contains(key.code),
-                   playing = showPlayback && playbackKeys.contains(key.code);
+        const bool live =
+                       liveKeys.contains(key.code) || pressedKeys.contains(key.code) || mouseKey_ == key.code,
+                   hover = hoverKey_ == key.code, playing = showPlayback && playbackKeys.contains(key.code);
         QColor accent = muted;
         if (it != map.bindings.end())
             accent = it->second.hand == Hand::Left ? left : it->second.hand == Hand::Right ? right : muted;
-        p.setPen(QPen(live ? accent : playing ? play : QColor("#32404e"), live || playing ? 2 : 1));
-        p.setBrush(live ? accent.darker(220) : playing ? play.darker(300) : QColor("#1a2532"));
+        p.setPen(QPen(live      ? accent
+                      : playing ? play
+                      : hover   ? accent
+                                : QColor("#32404e"),
+                      live || playing || hover ? 2 : 1));
+        p.setBrush(live      ? accent.darker(220)
+                   : playing ? play.darker(300)
+                   : hover   ? QColor("#283b50")
+                             : QColor("#1a2532"));
         p.drawRoundedRect(r, 5, 5);
         p.setPen(ink);
         p.setFont(QFont("sans-serif", 9));
@@ -69,7 +79,7 @@ void KeyboardView::paintEvent(QPaintEvent *) {
     p.setPen(muted);
     p.drawText(
         QRectF(16, area.top() - 27, width() - 32, 22),
-        "钢琴  /  A0–C8                                       Space 延音 · 左 Shift 弱奏 · 右 Shift 强奏");
+        "钢琴  /  A0–C8 · 点击或拖动演奏                      Space 延音 · 左 Shift 弱奏 · 右 Shift 强奏");
     const double w = area.width() / 52.;
     int index = 0;
     for (int n = 21; n <= 108; ++n) {
@@ -78,6 +88,10 @@ void KeyboardView::paintEvent(QPaintEvent *) {
         auto color = noteColor(liveNotes, n);
         if (!color.isValid() && showPlayback)
             color = noteColor(playbackNotes, n);
+        if (mouseNote_ == n)
+            color = right;
+        else if (!color.isValid() && hoverNote_ == n)
+            color = QColor("#d8d0f5");
         const QRectF r(area.left() + index * w, area.top(), w - 1, area.height());
         ++index;
         p.setPen(QColor("#cad1d8"));
@@ -98,6 +112,10 @@ void KeyboardView::paintEvent(QPaintEvent *) {
         auto color = noteColor(liveNotes, n);
         if (!color.isValid() && showPlayback)
             color = noteColor(playbackNotes, n);
+        if (mouseNote_ == n)
+            color = right;
+        else if (!color.isValid() && hoverNote_ == n)
+            color = QColor("#62577e");
         const QRectF r(area.left() + index * w - w * .31, area.top(), w * .62, area.height() * .62);
         p.setPen(QColor("#0d121a"));
         p.setBrush(color.isValid() ? color : QColor("#18212c"));
@@ -128,25 +146,96 @@ int KeyboardView::hitNote(QPointF point) const {
         }
     return -1;
 }
+uint16_t KeyboardView::hitKey(QPointF point, bool playableOnly) const {
+    for (const auto &key : physicalKeys())
+        if (keyRect(key).contains(point) &&
+            (!playableOnly || map.bindings.contains(key.code) || key.code == 42 || key.code == 54))
+            return key.code;
+    return 0;
+}
+void KeyboardView::updateHover(QPointF point) {
+    hoverKey_ = hitKey(point);
+    hoverNote_ = hitNote(point);
+    setCursor(hoverKey_ || hoverNote_ >= 0 ? Qt::PointingHandCursor : Qt::ArrowCursor);
+    update();
+}
+void KeyboardView::releaseMouseTarget() {
+    // Clear before callbacks: recording limits or dialogs can reset the gesture reentrantly.
+    const auto key = std::exchange(mouseKey_, uint16_t(0));
+    const int note = std::exchange(mouseNote_, -1);
+    if (key && mouseKey)
+        mouseKey(key, false);
+    if (note >= 0 && mouseNote)
+        mouseNote(note, false);
+}
+void KeyboardView::resetMouseInteraction() {
+    dragging_ = false;
+    mouseKey_ = hoverKey_ = 0;
+    mouseNote_ = hoverNote_ = -1;
+    unsetCursor();
+    update();
+}
+void KeyboardView::cancelMouseInteraction() {
+    dragging_ = false;
+    releaseMouseTarget();
+    resetMouseInteraction();
+}
+void KeyboardView::moveMouseTo(QPointF point) {
+    const auto key = hitKey(point);
+    const int note = hitNote(point);
+    if (key == mouseKey_ && note == mouseNote_)
+        return;
+    releaseMouseTarget();
+    if (!dragging_)
+        return;
+    mouseKey_ = key;
+    mouseNote_ = note;
+    if (key && mouseKey)
+        mouseKey(key, true);
+    if (note >= 0 && mouseNote)
+        mouseNote(note, true);
+    update();
+}
 void KeyboardView::mousePressEvent(QMouseEvent *e) {
     setFocus();
     if (e->button() == Qt::RightButton) {
-        for (const auto &key : physicalKeys())
-            if (keyRect(key).contains(e->position())) {
-                if (editKey)
-                    editKey(key.code);
-                return;
-            }
+        cancelMouseInteraction();
+        const auto code = hitKey(e->position(), false);
+        if (code && editKey)
+            editKey(code);
     }
     if (e->button() == Qt::LeftButton) {
-        mouseNote_ = hitNote(e->position());
-        if (mouseNote_ >= 0 && mouseNote)
-            mouseNote(mouseNote_, true);
+        dragging_ = true;
+        updateHover(e->position());
+        moveMouseTo(e->position());
     }
 }
-void KeyboardView::mouseReleaseEvent(QMouseEvent *) {
-    if (mouseNote_ >= 0 && mouseNote)
-        mouseNote(mouseNote_, false);
-    mouseNote_ = -1;
+void KeyboardView::mouseReleaseEvent(QMouseEvent *e) {
+    if (e->button() != Qt::LeftButton)
+        return;
+    dragging_ = false;
+    releaseMouseTarget();
+    updateHover(e->position());
+}
+void KeyboardView::mouseMoveEvent(QMouseEvent *e) {
+    if (dragging_ && !e->buttons().testFlag(Qt::LeftButton))
+        cancelMouseInteraction();
+    updateHover(e->position());
+    if (dragging_)
+        moveMouseTo(e->position());
+}
+void KeyboardView::leaveEvent(QEvent *) {
+    hoverKey_ = 0;
+    hoverNote_ = -1;
+    unsetCursor();
+    if (dragging_)
+        releaseMouseTarget();
+    update();
+}
+bool KeyboardView::event(QEvent *event) {
+    if (event->type() == QEvent::FocusOut || event->type() == QEvent::WindowDeactivate ||
+        event->type() == QEvent::Hide || event->type() == QEvent::UngrabMouse)
+        cancelMouseInteraction();
+    return QWidget::event(event);
 }
 } // namespace piano

@@ -31,6 +31,7 @@ class MainWindow : public QMainWindow {
   private:
     AudioEngine audio_;
     KeyboardState keyboard_;
+    KeyHolds keyHolds_;
     Song song_, recording_;
     QElapsedTimer recordingClock_;
     QFutureWatcher<ImportedSoundfont> loader_;
@@ -57,7 +58,9 @@ class MainWindow : public QMainWindow {
     bool importing_ = false;
     std::shared_ptr<std::atomic_bool> cancelImport_;
     void buildUi();
-    void key(uint16_t, bool);
+    void key(uint16_t, bool, KeySource source = KeySource::Physical);
+    bool canPlayLive(bool notify);
+    std::vector<Event> takeLiveReleases();
     void dispatchLive(const Event &);
     void releaseHeld();
     void emergencyStop();

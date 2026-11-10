@@ -1,0 +1,3 @@
+// Application icon for Explorer, taskbar, shortcuts and the installed program.
+#define IDI_OPENKEYS 101
+IDI_OPENKEYS ICON "openkeys.ico"

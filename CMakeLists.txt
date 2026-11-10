@@ -41,9 +41,16 @@ qt_add_resources(openkeys-soundfont-check check_assets PREFIX "/" FILES assets/d
 add_library(piano_ui src/ui/main_window.cpp src/ui/keyboard_view.cpp src/platform/input.cpp)
 target_link_libraries(piano_ui PUBLIC piano_audio Qt6::Widgets PRIVATE Qt6::Concurrent)
 qt_add_resources(piano_ui import_guide PREFIX "/" FILES docs/soundfont.md assets/demo.eopiano.json)
+qt_add_resources(piano_ui app_icons PREFIX "/" FILES
+  assets/icons/openkeys-16.png assets/icons/openkeys-24.png assets/icons/openkeys-32.png
+  assets/icons/openkeys-48.png assets/icons/openkeys-64.png assets/icons/openkeys-128.png
+  assets/icons/openkeys-256.png)
 qt_add_executable(openkeys src/main.cpp)
 target_link_libraries(openkeys PRIVATE piano_ui Qt6::Concurrent)
 if(WIN32)
+  enable_language(RC)
+  target_sources(openkeys PRIVATE src/platform/openkeys.rc)
+  target_include_directories(openkeys PRIVATE "${CMAKE_SOURCE_DIR}/assets/icons")
   target_link_libraries(piano_ui PRIVATE user32)
   set_target_properties(openkeys PROPERTIES WIN32_EXECUTABLE TRUE)
   target_compile_definitions(openkeys PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
@@ -128,9 +135,32 @@ set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Offline computer-keyboard piano")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY OpenKeysPiano)
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
 set(CPACK_PACKAGE_EXECUTABLES openkeys "OpenKeys Piano")
+set(CPACK_VERBATIM_VARIABLES TRUE)
 if(WIN32)
   set(CPACK_GENERATOR "NSIS;ZIP")
   set(CPACK_NSIS_DISPLAY_NAME "OpenKeys Piano")
+  set(CPACK_NSIS_EXECUTABLES_DIRECTORY ".")
+  set(CPACK_CREATE_DESKTOP_LINKS openkeys)
+  set(CPACK_NSIS_INSTALLED_ICON_NAME "openkeys.exe")
+  # Let CPack quote/convert this path; TO_NATIVE_PATH applies shell escaping too early.
+  set(_installer_icon "${CMAKE_SOURCE_DIR}/assets/icons/openkeys.ico")
+  set(CPACK_NSIS_MUI_ICON "${_installer_icon}")
+  set(CPACK_NSIS_MUI_UNIICON "${_installer_icon}")
+  # CPack's desktop checkbox lives on its optional PATH page; PATH stays off by default.
+  set(CPACK_NSIS_MODIFY_PATH ON)
+  set(CPACK_NSIS_DEFINES [[
+Unicode true
+!define MUI_CUSTOMFUNCTION_GUIINIT OpenKeysInitializeOptions
+Function OpenKeysInitializeOptions
+  WriteINIStr "$PLUGINSDIR\NSIS.InstallOptions.ini" "Field 5" "State" "1"
+FunctionEnd
+]])
+  # GUI initialization is skipped in /S mode, so apply the same default there.
+  set(CPACK_NSIS_EXTRA_PREINSTALL_COMMANDS [[
+  IfSilent 0 openkeys_options_ready
+    WriteINIStr "$PLUGINSDIR\NSIS.InstallOptions.ini" "Field 5" "State" "1"
+  openkeys_options_ready:
+]])
   set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
 else()
   set(CPACK_GENERATOR TGZ)

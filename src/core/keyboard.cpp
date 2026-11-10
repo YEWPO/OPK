@@ -241,6 +241,17 @@ void Keymap::save(const QString &path) const {
     if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
         throw FileError("io_error", file.errorString());
 }
+bool KeyHolds::change(uint16_t key, bool down, KeySource source) {
+    const unsigned bit = source == KeySource::Physical ? 1u : 2u;
+    const auto found = sources_.find(key);
+    const unsigned before = found == sources_.end() ? 0 : found->second;
+    const unsigned after = down ? before | bit : before & ~bit;
+    if (after)
+        sources_[key] = after;
+    else if (found != sources_.end())
+        sources_.erase(found);
+    return bool(before) != bool(after);
+}
 std::vector<Event> KeyboardState::change(uint16_t key, bool down, int64_t time) {
     if (key == 42) {
         soft = down;

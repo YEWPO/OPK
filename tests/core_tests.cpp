@@ -14,6 +14,57 @@ using namespace piano;
 class CoreTests : public QObject {
     Q_OBJECT
   private slots:
+    void mergedKeyboardSources_data() {
+        QTest::addColumn<int>("code");
+        QTest::newRow("note") << 30;
+        QTest::newRow("sustain") << 57;
+        QTest::newRow("soft") << 42;
+        QTest::newRow("hard") << 54;
+    }
+    void mergedKeyboardSources() {
+        QFETCH(int, code);
+        for (const auto first : {KeySource::Physical, KeySource::Mouse}) {
+            const auto second = first == KeySource::Physical ? KeySource::Mouse : KeySource::Physical;
+            for (const bool releaseFirst : {true, false}) {
+                KeyHolds holds;
+                KeyboardState state;
+                Song recording;
+                const auto change = [&](KeySource source, bool down) {
+                    if (!holds.change(uint16_t(code), down, source))
+                        return;
+                    const auto events = state.change(uint16_t(code), down);
+                    recording.events.insert(recording.events.end(), events.begin(), events.end());
+                };
+                change(first, true);
+                const auto count = recording.events.size();
+                change(first, true); // hardware repeat is not a second holder
+                change(second, true);
+                QCOMPARE(recording.events.size(), count);
+                state.keymap.transpose = 7;
+                state.keymap.octave[0] = 1;
+                change(releaseFirst ? first : second, false);
+                QCOMPARE(recording.events.size(), count);
+                if (code == 42)
+                    QVERIFY(state.soft);
+                else if (code == 54)
+                    QVERIFY(state.hard);
+                else
+                    QVERIFY(state.held(uint16_t(code)));
+                change(releaseFirst ? second : first, false);
+                QCOMPARE(recording.events.size(), count * 2);
+                QVERIFY(state.releaseAll().empty());
+                QVERIFY(!state.soft && !state.hard);
+                validateSong(recording); // Includes matching original pitches and pedal releases.
+                change(second, false);
+                QCOMPARE(recording.events.size(), count * 2);
+                holds.change(uint16_t(code), true, first);
+                holds.change(uint16_t(code), true, second);
+                holds.clear();
+                QVERIFY(!holds.change(uint16_t(code), false, second));
+                QVERIFY(holds.change(uint16_t(code), true, first));
+            }
+        }
+    }
     void keyboardSnapshot() {
         KeyboardState state;
         auto on = state.change(30, true);

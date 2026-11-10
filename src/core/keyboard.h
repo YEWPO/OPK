@@ -29,6 +29,19 @@ struct Keymap {
     static Keymap read(const QString &path);
     void save(const QString &path) const;
 };
+enum class KeySource { Physical, Mouse };
+// Merge input sources before changing KeyboardState, including pedal/modifier keys.
+class KeyHolds {
+  public:
+    // True only on the first press or final release of a key.
+    bool change(uint16_t key, bool down, KeySource source);
+    void clear() {
+        sources_.clear();
+    }
+
+  private:
+    std::map<uint16_t, unsigned> sources_;
+};
 class KeyboardState {
   public:
     Keymap keymap = Keymap::defaults();
