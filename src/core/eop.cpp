@@ -60,6 +60,9 @@ Map section(const Reader &r, qsizetype begin, qsizetype length, int stride) {
     r.range(begin, length);
     if (length < 28 || (length - 28) % stride || (length - 28) / stride > 256)
         throw FileError("unsupported_layout", "Invalid mapping section size");
+    // Compatibility assumption: the first signed header word is a downward
+    // semitone offset. See docs/eop-compatibility.md; not verified in Everyone Piano.
+    const auto offset = std::bit_cast<int32_t>(r.u32(begin));
     Map result;
     for (qsizetype p = begin + 28; p < begin + length; p += stride) {
         const auto key = r.u8(p + 4);
@@ -70,7 +73,10 @@ Map section(const Reader &r, qsizetype begin, qsizetype length, int stride) {
             const auto note = r.u16(p + 34);
             if (note > 127)
                 throw FileError("corrupt_eop", "Invalid mapped pitch");
-            map.notes.insert(uint8_t(note));
+            const int64_t pitch = int64_t(note) - offset;
+            if (pitch < 0 || pitch > 127)
+                throw FileError("corrupt_eop", "EOP mapping offset produces an out-of-range pitch");
+            map.notes.insert(uint8_t(pitch));
         } else
             map.control = true;
         result.emplace(key, std::move(map));

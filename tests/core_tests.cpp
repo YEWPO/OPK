@@ -186,6 +186,81 @@ class CoreTests : public QObject {
         song = parseEop(fixture::encode(fixture::decodedEop(201, true, true)));
         QCOMPARE(song.events.size(), size_t(4));
     }
+    void eopMappingOffsets() {
+        for (int version : {201, 301}) {
+            for (bool zeroSection : {false, true}) {
+                if (version == 301 && zeroSection)
+                    continue;
+                for (int offset : {0, 9, -3}) {
+                    auto data = fixture::decodedEop(version, false, zeroSection);
+                    fixture::u32(data, 0x1bc, uint32_t(offset));
+                    const auto song = parseEop(fixture::encode(data));
+                    QCOMPARE(song.events.size(), size_t(2));
+                    QCOMPARE(song.events[0].note, 60 - offset);
+                    QCOMPARE(song.events[1].note, 60 - offset);
+                    QCOMPARE(song.events[0].kind, Kind::NoteOn);
+                    QCOMPARE(song.events[1].kind, Kind::NoteOff);
+                    QCOMPARE(song.events[0].key, 30);
+                    QCOMPARE(song.events[1].timeUs, 500000);
+
+                    QTemporaryDir dir;
+                    QVERIFY(dir.isValid());
+                    const auto path = dir.filePath("offset.eopiano.json");
+                    saveRecording(path, song);
+                    const auto restored = readSong(path);
+                    QCOMPARE(restored.events.size(), song.events.size());
+                    QCOMPARE(restored.events[0].note, 60 - offset);
+                    QCOMPARE(restored.events[1].note, 60 - offset);
+                }
+            }
+        }
+    }
+    void eopLayerOffsets() {
+        for (int version : {201, 301}) {
+            for (bool zeroSection : {false, true}) {
+                if (version == 301 && zeroSection)
+                    continue;
+                const qsizetype second = 0x1bc + 28 + (version == 201 ? 42 : 52) + 4;
+                auto data = fixture::decodedEop(version, true, zeroSection);
+                fixture::u32(data, 0x1bc, 9);
+                fixture::u32(data, second, 3);
+                auto song = parseEop(fixture::encode(data));
+                QCOMPARE(song.events.size(), size_t(4));
+                QCOMPARE(song.events[0].note, 51);
+                QCOMPARE(song.events[1].note, 61);
+                QCOMPARE(song.events[2].note, 51);
+                QCOMPARE(song.events[3].note, 61);
+                // Distinct base pitches become the same pitch after per-layer offsets.
+                fixture::u32(data, second, 13);
+                song = parseEop(fixture::encode(data));
+                QCOMPARE(song.events.size(), size_t(2));
+                QCOMPARE(song.events[0].note, 51);
+                QCOMPARE(song.events[1].note, 51);
+            }
+        }
+    }
+    void eopOffsetBounds() {
+        for (int version : {201, 301}) {
+            for (int offset : {60, -67}) {
+                auto data = fixture::decodedEop(version);
+                fixture::u32(data, 0x1bc, uint32_t(offset));
+                auto song = parseEop(fixture::encode(data));
+                QCOMPARE(song.events[0].note, 60 - offset);
+                QCOMPARE(song.events[1].note, 60 - offset);
+            }
+            for (int32_t offset : {61, -68, std::numeric_limits<int32_t>::min(),
+                                   std::numeric_limits<int32_t>::max()}) {
+                auto data = fixture::decodedEop(version);
+                fixture::u32(data, 0x1bc, uint32_t(offset));
+                QVERIFY_EXCEPTION_THROWN(parseEop(fixture::encode(data)), FileError);
+            }
+        }
+        auto data = fixture::decodedEop(200);
+        fixture::u32(data, 0x1b8, 9);
+        const auto song = parseEop(fixture::encode(data, true));
+        QCOMPARE(song.events[0].note, 60);
+        QCOMPARE(song.events[1].note, 60);
+    }
     void eopMetadataAndExtendedKeys() {
         auto data = fixture::decodedEop(201);
         data.replace(0x134, 64, QByteArray(64, '\0'));

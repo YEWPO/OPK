@@ -13,6 +13,12 @@ Limits: files up to 64 MiB, at most 1,000,000 expanded events, 24-hour timeline,
 
 The importer validates container boundaries, record sizes, finite monotonic timestamps, note/status/velocity ranges, reserved event bytes and note pairing. Known v201/v301 layouts contain a trailing non-event record, excluded according to the reference layout. Pitch sets from parallel layers are merged and duplicate pitches removed. Extended Set-1 key codes are normalized from EOP bit 7 to the Raw Input E0 bit 8 representation. Imported keys remain attached to events for display; changing the live keyboard map never changes imported pitches.
 
+### Experimental v201/v301 mapping offset
+
+As a user-approved compatibility assumption, the first little-endian signed 32-bit word of each 28-byte mapping-section header is treated as a downward semitone offset: `pitch = mapped note - offset`. This rule is not established by the reference specification and has not been verified against Everyone Piano. The locally supplied v301 sample has value 9, so a mapped C becomes E-flat nine semitones lower (not three semitones higher). Other header parameters, including possible octave settings, remain uninterpreted; this is not general key-signature detection.
+
+The offset is applied separately to each layer before merging and deduplicating pitches, including the v201 unprefixed first-section variant. Zero leaves pitches unchanged; a negative offset raises pitches. Both note-on and note-off use the resulting absolute pitch, and values outside 0–127 are rejected rather than clamped or wrapped. Playback and piano highlights use these pitches independently of live-keyboard transpose. Native `.eopiano.json` saves contain the corrected absolute pitches and do not apply the offset again. v200 behavior is unchanged.
+
 Known non-note control events are not interpreted as notes. They are skipped with a visible warning because their semantics have not been verified. This can affect sustain or other original performance controls. An event referring to an absent key mapping is rejected rather than guessed. Positive note-on velocity is required; no attempt is made to infer a nonzero velocity from an undocumented zero value.
 
 v200 has documented left/right actions. v201/v301 hand assignments are retained as Unknown, not inferred from the user's live keyboard or current note range. Metadata is decoded as UTF-8, then GB18030 where supported. Metadata decoding does not change pitch/timing interpretation.
