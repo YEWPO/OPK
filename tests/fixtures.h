@@ -72,6 +72,41 @@ inline QByteArray decodedEop(int version, bool layered = false, bool zeroSection
     b[start + 25] = 30;
     return b;
 }
+inline QByteArray changingKeyEop() {
+    auto b = decodedEop(301);
+    constexpr int header = 0x1bc, record = header + 28, oldStart = record + 52;
+    // Remap the transpose-up action to scan code 31, not F1.
+    b.insert(oldStart, QByteArray(52, '\0'));
+    u32(b, 0x1b8, 28 + 104);
+    u32(b, 0x28, 4 + 28 + 104);
+    u32(b, header, 9);
+    u32(b, header + 4, uint32_t(-1));
+    u32(b, header + 12, 40);
+    u32(b, header + 16, 60);
+    b[oldStart + 4] = 31;
+    u16(b, oldStart + 32, 0x190);
+    const int start = oldStart + 52;
+    b.resize(start);
+    const auto event = [&](double time, int status, int key, int velocity) {
+        QByteArray e(16, '\0');
+        real(e, 0, time);
+        e[8] = char(status);
+        e[9] = char(key);
+        e[10] = char(velocity);
+        b.append(e);
+    };
+    event(0, 0x90, 30, 90);
+    event(100, 0x90, 31, 0);
+    event(100, 0x90, 31, 0);
+    event(150, 0x80, 31, 0);
+    event(150, 0x80, 31, 0);
+    event(200, 0x80, 30, 0); // Must release Eb, despite current F configuration.
+    event(300, 0x90, 30, 90);
+    event(500, 0x80, 30, 0);
+    b.append(QByteArray(16, '\0'));
+    u32(b, 0x2c, 9 * 16);
+    return encode(b);
+}
 inline QByteArray chunk(const char *id, QByteArray content) {
     if (content.size() % 2)
         content += '\0';

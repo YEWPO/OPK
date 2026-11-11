@@ -14,23 +14,23 @@
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
-#include <QGroupBox>
 #include <QGridLayout>
-#include <QKeyEvent>
-#include <QLineEdit>
+#include <QGroupBox>
 #include <QIcon>
+#include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMessageBox>
-#include <QPointer>
 #include <QPainter>
+#include <QPointer>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
-#include <QStyleOptionSpinBox>
 #include <QStandardPaths>
 #include <QStatusBar>
+#include <QStyleOptionSpinBox>
 #include <QTextBrowser>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -84,8 +84,12 @@ template <typename Base> class ArrowOnlySpin : public Base {
     }
 
   protected:
-    void keyPressEvent(QKeyEvent *event) override { event->ignore(); }
-    void wheelEvent(QWheelEvent *event) override { event->ignore(); }
+    void keyPressEvent(QKeyEvent *event) override {
+        event->ignore();
+    }
+    void wheelEvent(QWheelEvent *event) override {
+        event->ignore();
+    }
     void paintEvent(QPaintEvent *event) override {
         Base::paintEvent(event);
         QStyleOptionSpinBox option;
@@ -95,13 +99,13 @@ template <typename Base> class ArrowOnlySpin : public Base {
         painter.setPen(Qt::NoPen);
         for (bool up : {true, false}) {
             const auto part = up ? QStyle::SC_SpinBoxUp : QStyle::SC_SpinBoxDown;
-            const auto center = this->style()->subControlRect(QStyle::CC_SpinBox, &option, part, this).center();
-            const bool enabled = option.stepEnabled & (up ? QAbstractSpinBox::StepUpEnabled
-                                                         : QAbstractSpinBox::StepDownEnabled);
+            const auto center =
+                this->style()->subControlRect(QStyle::CC_SpinBox, &option, part, this).center();
+            const bool enabled = option.stepEnabled &
+                                 (up ? QAbstractSpinBox::StepUpEnabled : QAbstractSpinBox::StepDownEnabled);
             painter.setBrush(QColor(enabled ? "#e6edf7" : "#758295"));
             const double x = center.x(), y = center.y(), direction = up ? -1. : 1.;
-            painter.drawPolygon(QPolygonF{QPointF(x, y + direction * 3),
-                                          QPointF(x - 4, y - direction * 2),
+            painter.drawPolygon(QPolygonF{QPointF(x, y + direction * 3), QPointF(x - 4, y - direction * 2),
                                           QPointF(x + 4, y - direction * 2)});
         }
     }
@@ -117,6 +121,18 @@ class PerformanceSpin : public ArrowOnlySpin<QSpinBox> {
   public:
     enum Display { Number, Key, Octave };
     explicit PerformanceSpin(Display display) : display_(display) {}
+    QString displayText() const {
+        return textFromValue(value());
+    }
+    QSize sizeHint() const override {
+        auto size = ArrowOnlySpin<QSpinBox>::sizeHint();
+        int width = 0;
+        for (int value = minimum(); value <= maximum(); ++value)
+            width = std::max(width, fontMetrics().horizontalAdvance(textFromValue(value)));
+        // Include both stylesheet padding and the separate arrow column.
+        size.setWidth(std::max(size.width(), width + 72));
+        return size;
+    }
 
   protected:
     QString textFromValue(int value) const override {
@@ -125,8 +141,9 @@ class PerformanceSpin : public ArrowOnlySpin<QSpinBox> {
             const int index = (value % 12 + 12) % 12;
             const int octave = (value - index) / 12;
             const auto name = QString::fromLatin1(names[index]);
-            return octave == 0 ? name : name + (octave > 0 ? QStringLiteral("（高 1 个八度）")
-                                                          : QStringLiteral("（低 1 个八度）"));
+            return octave == 0 ? name
+                               : name + (octave > 0 ? QStringLiteral("（高 1 个八度）")
+                                                    : QStringLiteral("（低 1 个八度）"));
         }
         if (display_ == Octave)
             return value == 0 ? QStringLiteral("原音区")
@@ -409,8 +426,11 @@ void MainWindow::buildUi() {
             return;
         if (audio_.status().playing)
             audio_.pause();
-        else
+        else {
+            playbackConfiguration_ = !song_.configurations.empty();
             audio_.play();
+        }
+        syncPerformance(audio_.status().positionUs);
         view_->setFocus();
     });
     connect(stop, &QPushButton::clicked, this, [this] {
@@ -418,6 +438,8 @@ void MainWindow::buildUi() {
             finishRecord();
         else
             audio_.stop();
+        playbackConfiguration_ = false;
+        syncPerformance(0);
         view_->setFocus();
     });
     connect(recordButton_, &QPushButton::clicked, this, [this] {
@@ -466,7 +488,8 @@ void MainWindow::buildUi() {
         auto *octave = performanceSpin(-3, 3, keyboard_.keymap.octave[size_t(hand)], PerformanceSpin::Octave);
         octave->setObjectName(hand == 0 ? "leftOctave" : "rightOctave");
         handsRow->addWidget(field(hand == 0 ? "左手音区" : "右手音区", octave));
-        auto *velocity = performanceSpin(1, 127, keyboard_.keymap.velocity[size_t(hand)], PerformanceSpin::Number);
+        auto *velocity =
+            performanceSpin(1, 127, keyboard_.keymap.velocity[size_t(hand)], PerformanceSpin::Number);
         velocity->setObjectName(hand == 0 ? "leftVelocity" : "rightVelocity");
         handsRow->addWidget(field("力度", velocity));
         connect(octave, &QSpinBox::valueChanged, this, [this, hand](int value) {
@@ -599,6 +622,8 @@ void MainWindow::emergencyStop() {
         releaseHeld();
     if (background_->isChecked())
         background_->setChecked(false);
+    playbackConfiguration_ = false;
+    syncPerformance(0);
     audio_.panic();
     statusBar()->showMessage("已止音，后台演奏已关闭。", 5000);
     view_->setFocus();
@@ -607,6 +632,8 @@ void MainWindow::setSong(Song song) {
     releaseHeld();
     audio_.setSong(song);
     song_ = std::move(song);
+    playbackConfiguration_ = false;
+    syncPerformance(0);
     dirty_ = false;
     visualCursor_ = 0;
     visualTime_ = -1;
@@ -651,6 +678,8 @@ void MainWindow::toggleRecord() {
     if (!maybeSave())
         return;
     releaseHeld();
+    playbackConfiguration_ = false;
+    syncPerformance(0);
     audio_.setSong({});
     song_ = {};
     recording_ = {};
@@ -851,6 +880,25 @@ void MainWindow::startAudio(bool allowReload) {
     if (!notice.isEmpty())
         statusBar()->showMessage(notice, 20000);
 }
+void MainWindow::syncPerformance(int64_t positionUs) {
+    const auto *config = playbackConfiguration_ ? song_.configurationAt(positionUs) : nullptr;
+    const auto sync = [this, config](const char *name, std::optional<int> value, int live) {
+        auto *control = findChild<QSpinBox *>(QLatin1String(name));
+        QSignalBlocker blocker(control);
+        control->setEnabled(!config);
+        control->setValue(config ? value.value_or(0) : live);
+        auto *edit = control->findChild<QLineEdit *>();
+        // Force refresh even when restoring a value equal to the previous one.
+        edit->setText(config && !value ? QStringLiteral("未知")
+                                       : static_cast<PerformanceSpin *>(control)->displayText());
+    };
+    sync("transpose", config ? std::optional<int>(config->transpose) : std::nullopt,
+         keyboard_.keymap.transpose);
+    sync("leftOctave", config ? config->octave[0] : std::nullopt, keyboard_.keymap.octave[0]);
+    sync("rightOctave", config ? config->octave[1] : std::nullopt, keyboard_.keymap.octave[1]);
+    sync("leftVelocity", config ? config->velocity[0] : std::nullopt, keyboard_.keymap.velocity[0]);
+    sync("rightVelocity", config ? config->velocity[1] : std::nullopt, keyboard_.keymap.velocity[1]);
+}
 void MainWindow::tick() {
     const auto status = audio_.status();
     if (status.overflows != lastOverflow_) {
@@ -867,6 +915,7 @@ void MainWindow::tick() {
             finishRecord();
         releaseHeld();
         audio_.shutdown();
+        playbackConfiguration_ = false;
         statusBar()->showMessage("音频设备已停止，已清除演奏状态。请在音频设置中重连设备。", 15000);
     }
     wasAudioActive_ = status.active;
@@ -891,6 +940,9 @@ void MainWindow::tick() {
     while (visualCursor_ < song_.events.size() && song_.events[visualCursor_].timeUs <= status.positionUs)
         applyVisual(view_, song_.events[visualCursor_++], true);
     visualTime_ = status.positionUs;
+    if (!status.playing && status.positionUs >= song_.durationUs())
+        playbackConfiguration_ = false;
+    syncPerformance(status.positionUs);
     view_->showPlayback = status.playing;
     view_->update();
     deviceLabel_->setText(status.active ? QString("%1 Hz · 报告缓冲延迟 %2 ms · 欠载 %3")

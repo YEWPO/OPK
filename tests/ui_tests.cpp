@@ -4,9 +4,9 @@
 #include "ui/main_window.h"
 #include <QApplication>
 #include <QClipboard>
-#include <QDoubleSpinBox>
 #include <QDialog>
 #include <QDir>
+#include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileInfo>
 #include <QLabel>
@@ -14,11 +14,11 @@
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPushButton>
-#include <QSpinBox>
-#include <QStyleOptionSpinBox>
-#include <QStatusBar>
-#include <QStandardPaths>
 #include <QScopeGuard>
+#include <QSpinBox>
+#include <QStandardPaths>
+#include <QStatusBar>
+#include <QStyleOptionSpinBox>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTextBrowser>
@@ -339,6 +339,47 @@ class UiTests : public QObject {
         }
         settings.remove("soundfont");
     }
+    void playbackPerformanceConfiguration() {
+        MainWindow window(true);
+        window.show();
+        window.setSong(parseEop(fixture::changingKeyEop()));
+        auto *key = window.findChild<QSpinBox *>("transpose");
+        auto *velocity = window.findChild<QSpinBox *>("leftVelocity");
+        const auto live = window.keyboard_.keymap;
+        window.playbackConfiguration_ = true;
+        window.syncPerformance(0);
+        QCOMPARE(key->text(), QStringLiteral("Eb"));
+        QCOMPARE(velocity->value(), 40);
+        QVERIFY(!key->isEnabled());
+        window.audio_.play();
+        std::vector<float> block(4800 * 2);
+        window.audio_.render(block.data(), 4800);
+        window.tick();
+        QCOMPARE(key->text(), QStringLiteral("F"));
+        window.audio_.pause();
+        window.audio_.render(block.data(), 4800);
+        window.tick();
+        QCOMPARE(key->text(), QStringLiteral("F"));
+        window.playbackConfiguration_ = false;
+        window.syncPerformance(0);
+        QCOMPARE(key->value(), live.transpose);
+        QCOMPARE(velocity->value(), live.velocity[0]);
+        QVERIFY(key->isEnabled());
+        window.playbackConfiguration_ = true;
+        window.syncPerformance(0);
+        QCOMPARE(key->text(), QStringLiteral("Eb"));
+        window.audio_.play();
+        for (int i = 0; i < 6; ++i)
+            window.audio_.render(block.data(), 4800);
+        window.tick();
+        QCOMPARE(key->value(), live.transpose);
+        QVERIFY(key->isEnabled());
+        window.playbackConfiguration_ = true;
+        window.syncPerformance(300000);
+        window.setSong({});
+        QVERIFY(key->isEnabled());
+        QCOMPARE(window.keyboard_.keymap.transpose, live.transpose);
+    }
     void performanceControls() {
         MainWindow window(true);
         window.show();
@@ -350,6 +391,15 @@ class UiTests : public QObject {
             const auto labels = control->parentWidget()->findChildren<QLabel *>();
             QCOMPARE(labels.size(), 1);
             QCOMPARE(control->geometry().left() - labels[0]->geometry().right() - 1, 8);
+        }
+        for (const auto *name : {"leftVelocity", "rightVelocity"}) {
+            auto *control = window.findChild<QSpinBox *>(name);
+            for (const int value : {1, 99, 100, 127}) {
+                control->setValue(value);
+                const auto *edit = control->findChild<QLineEdit *>();
+                QVERIFY(edit->contentsRect().width() >=
+                        edit->fontMetrics().horizontalAdvance(control->text()));
+            }
         }
         auto *transpose = window.findChild<QSpinBox *>("transpose");
         QVERIFY(transpose);
@@ -395,9 +445,8 @@ class UiTests : public QObject {
                 QTest::keyClick(control, key);
             }
             for (QWidget *target : {static_cast<QWidget *>(control), static_cast<QWidget *>(editor)}) {
-                QWheelEvent wheel(QPointF(5, 5), target->mapToGlobal(QPoint(5, 5)), {},
-                                  QPoint(0, 120), Qt::NoButton, Qt::NoModifier,
-                                  Qt::NoScrollPhase, false);
+                QWheelEvent wheel(QPointF(5, 5), target->mapToGlobal(QPoint(5, 5)), {}, QPoint(0, 120),
+                                  Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
                 QApplication::sendEvent(target, &wheel);
             }
             QCOMPARE(control->text(), before);

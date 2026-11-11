@@ -4,6 +4,7 @@
 #include <QStringList>
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -21,11 +22,18 @@ struct Event {
     uint16_t key = 0;
     uint8_t source = 0; // 0 live, 1 playback; not serialized
 };
+struct PerformanceConfig {
+    int64_t timeUs = 0;
+    int transpose = 0;
+    std::array<std::optional<int>, 2> octave{}, velocity{};
+};
 struct Song {
     QString title;
     QString author;
     std::vector<Event> events;
     QStringList warnings;
+    std::vector<PerformanceConfig> configurations;
+    const PerformanceConfig *configurationAt(int64_t timeUs) const;
     int64_t durationUs() const {
         return events.empty() ? 0 : events.back().timeUs;
     }

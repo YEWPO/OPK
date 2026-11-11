@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <bit>
 #include <cmath>
+#include <deque>
 #include <map>
 #include <set>
 
@@ -47,6 +48,7 @@ struct Mapping {
     Hand hand = Hand::Unknown;
     int velocity = -1;
     bool control = false;
+    int transposeDelta = 0;
 };
 using Map = std::map<uint8_t, Mapping>;
 void merge(Map &to, const Map &from) {
@@ -54,6 +56,11 @@ void merge(Map &to, const Map &from) {
         auto &target = to[key];
         target.notes.insert(map.notes.begin(), map.notes.end());
         target.control = target.control || map.control;
+        if (map.transposeDelta) {
+            if (target.transposeDelta && target.transposeDelta != map.transposeDelta)
+                throw FileError("unsupported_layout", "Conflicting transpose actions");
+            target.transposeDelta = map.transposeDelta;
+        }
     }
 }
 Map section(const Reader &r, qsizetype begin, qsizetype length, int stride) {
@@ -78,8 +85,13 @@ Map section(const Reader &r, qsizetype begin, qsizetype length, int stride) {
             if (pitch < 0 || pitch > 127)
                 throw FileError("corrupt_eop", "EOP mapping offset produces an out-of-range pitch");
             map.notes.insert(uint8_t(pitch));
-        } else
+        } else {
             map.control = true;
+            // Action identifiers are stored in the mapping, independently of the physical key.
+            const auto action = r.u16(p + 32);
+            if (action == 0x190 || action == 0x290)
+                map.transposeDelta = action == 0x190 ? 1 : -1;
+        }
         result.emplace(key, std::move(map));
     }
     return result;
@@ -209,6 +221,26 @@ Song parseEop(const QByteArray &raw) {
     }
     if (count > qsizetype(MaxEvents))
         throw FileError("too_many_events", "EOP event limit exceeded");
+    if (version != 200) {
+        PerformanceConfig config;
+        const qsizetype header = Header + 4;
+        const auto offset = std::bit_cast<int32_t>(r.u32(header));
+        config.transpose = int((-int64_t(offset) % 12 + 12) % 12);
+        // The v301 sample carries per-hand octave and dynamics in these header words.
+        if (version == 301) {
+            for (size_t h = 0; h < 2; ++h) {
+                const int octave = std::bit_cast<int32_t>(r.u32(header + 4 + qsizetype(h) * 4));
+                const auto velocity = r.u32(header + 12 + qsizetype(h) * 4);
+                if (octave >= -3 && octave <= 3)
+                    config.octave[h] = octave;
+                if (velocity >= 1 && velocity <= 127)
+                    config.velocity[h] = int(velocity);
+            }
+        }
+        song.configurations.push_back(config);
+    }
+    int transposeDelta = 0;
+    std::map<uint8_t, std::deque<std::vector<Event>>> active;
     double previous = -1;
     bool controlWarning = false;
     for (qsizetype i = 0; i < count; ++i) {
@@ -225,8 +257,30 @@ Song parseEop(const QByteArray &raw) {
             throw FileError("unsupported_layout",
                             QString("Unmapped scan code 0x%1").arg(key, 2, 16, QChar('0')));
         const auto &m = found->second;
-        if (m.control)
+        if (m.control && m.transposeDelta && !song.configurations.empty()) {
+            if (status == 0x90) {
+                auto config = song.configurations.back();
+                config.timeUs = int64_t(std::llround(ms * 1000));
+                config.transpose = (config.transpose + m.transposeDelta + 12) % 12;
+                transposeDelta = config.transpose - song.configurations.front().transpose;
+                song.configurations.push_back(config);
+            }
+        } else if (m.control)
             controlWarning = true;
+        if (status == 0x80 && !m.notes.empty()) {
+            auto &held = active[key];
+            if (held.empty())
+                throw FileError("corrupt_eop", "Unmatched key release");
+            for (auto e : held.front()) {
+                e.timeUs = int64_t(std::llround(ms * 1000));
+                e.kind = Kind::NoteOff;
+                e.velocity = velocity;
+                song.events.push_back(e);
+            }
+            held.pop_front();
+            continue;
+        }
+        std::vector<Event> pressed;
         for (auto pitch : m.notes) {
             Event e;
             e.timeUs = int64_t(std::llround(ms * 1000));
@@ -234,13 +288,19 @@ Song parseEop(const QByteArray &raw) {
             // EOP's one-byte extended Set-1 codes use bit 7; the application
             // represents E0 separately in bit 8 to match Windows Raw Input.
             e.key = key >= 128 ? uint16_t((key & 0x7f) | 0x100) : key;
-            e.note = pitch;
+            const int shifted = int(pitch) + transposeDelta;
+            if (shifted < 0 || shifted > 127)
+                throw FileError("corrupt_eop", "Transpose produces an out-of-range pitch");
+            e.note = uint8_t(shifted);
             e.hand = m.hand;
             e.velocity = uint8_t(e.kind == Kind::NoteOn && m.velocity >= 0 ? m.velocity : velocity);
             song.events.push_back(e);
+            pressed.push_back(e);
             if (song.events.size() > MaxEvents)
                 throw FileError("too_many_events", "Expanded EOP event limit exceeded");
         }
+        if (!pressed.empty())
+            active[key].push_back(std::move(pressed));
     }
     validateSong(song);
     if (controlWarning)

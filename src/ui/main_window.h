@@ -15,6 +15,7 @@ class QCheckBox;
 class QProgressBar;
 class QDoubleSpinBox;
 class QCloseEvent;
+class UiTests;
 namespace piano {
 class InputRouter;
 class KeyboardView;
@@ -29,6 +30,7 @@ class MainWindow : public QMainWindow {
     void closeEvent(QCloseEvent *) override;
 
   private:
+    friend class ::UiTests;
     AudioEngine audio_;
     KeyboardState keyboard_;
     KeyHolds keyHolds_;
@@ -65,6 +67,8 @@ class MainWindow : public QMainWindow {
     void releaseHeld();
     void emergencyStop();
     void tick();
+    void syncPerformance(int64_t positionUs);
+    bool playbackConfiguration_ = false;
     void toggleRecord();
     void finishRecord();
     bool maybeSave();

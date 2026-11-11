@@ -155,6 +155,42 @@ class CoreTests : public QObject {
         s.events = {{-1, Kind::NoteOn, 60, 80, Hand::Left}, {20, Kind::NoteOff, 60, 0, Hand::Left}};
         QVERIFY_EXCEPTION_THROWN(validateSong(s), FileError);
     }
+    void eopChangingKey() {
+        const auto song = parseEop(fixture::changingKeyEop());
+        QCOMPARE(song.events.size(), size_t(4));
+        QCOMPARE(song.events[0].note, 63);
+        QCOMPARE(song.events[1].note, 63);
+        QCOMPARE(song.events[2].note, 65);
+        QCOMPARE(song.events[3].note, 65);
+        QCOMPARE(song.configurations.size(), size_t(3));
+        QCOMPARE(song.configurationAt(0)->transpose, 3);
+        QCOMPARE(song.configurations[1].transpose, 4);
+        QCOMPARE(song.configurationAt(100000)->transpose, 5);
+        QCOMPARE(song.configurationAt(0)->octave[0].value(), -1);
+        QCOMPARE(song.configurationAt(0)->velocity[0].value(), 40);
+        QVERIFY(song.warnings.empty());
+        QTemporaryDir dir;
+        const auto path = dir.filePath("changed.eopiano.json");
+        saveRecording(path, song);
+        const auto copy = readSong(path);
+        QCOMPARE(copy.configurationAt(100000)->transpose, 5);
+        QCOMPARE(copy.events[2].note, 65);
+        QCOMPARE(copy.configurationAt(0)->velocity[1].value(), 60);
+        auto invalid = song;
+        invalid.configurations.back().timeUs = -1;
+        QVERIFY_EXCEPTION_THROWN(validateSong(invalid), FileError);
+    }
+    void localEopSample() {
+        const auto path = qEnvironmentVariable("OPENKEYS_EOP_SAMPLE");
+        if (path.isEmpty())
+            QSKIP("Optional local sample");
+        const auto song = readSong(path);
+        QCOMPARE(song.configurationAt(0)->transpose, 3);
+        QCOMPARE(song.configurationAt(155883000)->transpose, 5);
+        QCOMPARE(song.configurationAt(0)->velocity[0].value(), 40);
+        QCOMPARE(song.configurationAt(0)->velocity[1].value(), 60);
+        QVERIFY(song.warnings.empty());
+    }
     void eopVersions_data() {
         QTest::addColumn<int>("version");
         QTest::newRow("v200") << 200;
@@ -191,10 +227,13 @@ class CoreTests : public QObject {
             for (bool zeroSection : {false, true}) {
                 if (version == 301 && zeroSection)
                     continue;
-                for (const auto &[offset, expected] : std::array<std::pair<int32_t, int>, 6>{
-                         {{0, 60}, {9, 63}, {-3, 63}, {12, 60},
-                          {std::numeric_limits<int32_t>::min(), 68},
-                          {std::numeric_limits<int32_t>::max(), 65}}}) {
+                for (const auto &[offset, expected] :
+                     std::array<std::pair<int32_t, int>, 6>{{{0, 60},
+                                                             {9, 63},
+                                                             {-3, 63},
+                                                             {12, 60},
+                                                             {std::numeric_limits<int32_t>::min(), 68},
+                                                             {std::numeric_limits<int32_t>::max(), 65}}}) {
                     auto data = fixture::decodedEop(version, false, zeroSection);
                     fixture::u32(data, 0x1bc, uint32_t(offset));
                     const auto song = parseEop(fixture::encode(data));

@@ -54,6 +54,30 @@ Song readRecording(const QByteArray &data) {
         e.key = uint16_t(integer(item, "key", 0, 511));
         song.events.push_back(e);
     }
+    if (o.contains("configurations")) {
+        if (!o.value("configurations").isArray())
+            throw FileError("invalid_recording", "Expected configurations array");
+        const auto configs = o.value("configurations").toArray();
+        if (size_t(configs.size()) > MaxEvents)
+            throw FileError("too_many_events", "Configuration limit exceeded");
+        for (const auto &value : configs) {
+            if (!value.isObject())
+                throw FileError("invalid_recording", "Expected configuration object");
+            const auto item = value.toObject();
+            PerformanceConfig config;
+            config.timeUs = integer(item, "timeUs", 0, MaxSongUs);
+            config.transpose = int(integer(item, "transpose", 0, 11));
+            for (size_t h = 0; h < 2; ++h) {
+                const auto octave = h == 0 ? "leftOctave" : "rightOctave";
+                const auto velocity = h == 0 ? "leftVelocity" : "rightVelocity";
+                if (item.contains(octave))
+                    config.octave[h] = int(integer(item, octave, -3, 3));
+                if (item.contains(velocity))
+                    config.velocity[h] = int(integer(item, velocity, 1, 127));
+            }
+            song.configurations.push_back(config);
+        }
+    }
     validateSong(song);
     return song;
 }
@@ -69,11 +93,23 @@ void saveRecording(const QString &path, const Song &song) {
                                    {"velocity", e.velocity},
                                    {"hand", int(e.hand)},
                                    {"key", e.key}});
+    QJsonArray configs;
+    for (const auto &config : song.configurations) {
+        QJsonObject item{{"timeUs", qint64(config.timeUs)}, {"transpose", config.transpose}};
+        for (size_t h = 0; h < 2; ++h) {
+            if (config.octave[h])
+                item[h == 0 ? "leftOctave" : "rightOctave"] = *config.octave[h];
+            if (config.velocity[h])
+                item[h == 0 ? "leftVelocity" : "rightVelocity"] = *config.velocity[h];
+        }
+        configs.append(item);
+    }
     const QByteArray bytes = QJsonDocument(QJsonObject{{"format", "openkeys-recording"},
                                                        {"version", 1},
                                                        {"title", song.title},
                                                        {"author", song.author},
-                                                       {"events", entries}})
+                                                       {"events", entries},
+                                                       {"configurations", configs}})
                                  .toJson(QJsonDocument::Compact);
     if (bytes.size() > MaxFileBytes)
         throw FileError("file_too_large", "Recording exceeds 64 MiB");
