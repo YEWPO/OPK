@@ -208,7 +208,7 @@ Keymap Keymap::read(const QString &path) {
     Keymap map;
     map.transpose = jsonInt(o, "transpose", -12, 12);
     map.octave = {jsonInt(o, "leftOctave", -3, 3), jsonInt(o, "rightOctave", -3, 3)};
-    map.velocity = {jsonInt(o, "leftVelocity", 1, 127), jsonInt(o, "rightVelocity", 1, 127)};
+    map.velocity = {jsonInt(o, "leftVelocity", 0, 127), jsonInt(o, "rightVelocity", 0, 127)};
     if (!o.value("bindings").isArray() || o.value("bindings").toArray().size() > 511)
         throw FileError("invalid_keymap", "Invalid bindings");
     for (auto item : o.value("bindings").toArray()) {
@@ -301,6 +301,10 @@ std::vector<Event> KeyboardState::change(uint16_t key, bool down, int64_t time) 
         if (pitch < 0 || pitch > 127)
             return {};
         int velocity = keymap.velocity[size_t(hand)];
+        if (velocity == 0) {
+            pressed_[key] = {};
+            return {};
+        }
         if (soft)
             velocity = int(std::lround(velocity * .65));
         if (hard)

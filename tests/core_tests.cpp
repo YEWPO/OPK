@@ -105,6 +105,29 @@ class CoreTests : public QObject {
         state.keymap.transpose = 1;
         QVERIFY(state.change(31, true).empty());
     }
+    void zeroVelocity() {
+        KeyboardState state;
+        const auto held = state.change(30, true);
+        QVERIFY(!held.empty());
+        state.keymap.velocity[0] = 0;
+        for (bool hard : {false, true}) {
+            state.change(54, hard);
+            QVERIFY(state.change(31, true).empty());
+            QVERIFY(state.held(31));
+            QVERIFY(state.change(31, false).empty());
+        }
+        const auto released = state.change(30, false);
+        QCOMPARE(released.size(), size_t(1));
+        QCOMPARE(released[0].kind, Kind::NoteOff);
+        QCOMPARE(released[0].note, held[0].note);
+        QCOMPARE(state.change(57, true).size(), size_t(3));
+        QCOMPARE(state.change(57, false).size(), size_t(3));
+        QVERIFY(state.releaseAll().empty());
+        QTemporaryDir dir;
+        const auto path = dir.filePath("silent.json");
+        state.keymap.save(path);
+        QCOMPARE(Keymap::read(path).velocity[0], 0);
+    }
     void keymapPersistence() {
         QTemporaryDir dir;
         auto path = dir.filePath("keys.json");

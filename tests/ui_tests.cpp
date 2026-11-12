@@ -4,7 +4,9 @@
 #include "ui/main_window.h"
 #include <QApplication>
 #include <QClipboard>
+#include <QComboBox>
 #include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QFile>
@@ -349,7 +351,7 @@ class UiTests : public QObject {
         window.playbackConfiguration_ = true;
         window.syncPerformance(0);
         QCOMPARE(key->text(), QStringLiteral("Eb"));
-        QCOMPARE(velocity->value(), 40);
+        QCOMPARE(velocity->value(), 31);
         QVERIFY(!key->isEnabled());
         window.audio_.play();
         std::vector<float> block(4800 * 2);
@@ -363,7 +365,7 @@ class UiTests : public QObject {
         window.playbackConfiguration_ = false;
         window.syncPerformance(0);
         QCOMPARE(key->value(), live.transpose);
-        QCOMPARE(velocity->value(), live.velocity[0]);
+        QCOMPARE(velocity->value(), (live.velocity[0] * 100 + 63) / 127);
         QVERIFY(key->isEnabled());
         window.playbackConfiguration_ = true;
         window.syncPerformance(0);
@@ -397,7 +399,7 @@ class UiTests : public QObject {
                 window.tick(); // No audio callback has processed Play yet.
                 QCOMPARE(window.pendingPlayRequest_, request);
                 QCOMPARE(key->text(), QStringLiteral("Eb"));
-                QCOMPARE(velocity->value(), 40);
+                QCOMPARE(velocity->value(), 31);
                 QVERIFY(!key->isEnabled());
             }
             window.audio_.render(block.data(), 4800);
@@ -415,7 +417,7 @@ class UiTests : public QObject {
             window.tick();
             QVERIFY(!window.audio_.status().playing);
             QCOMPARE(key->value(), live.transpose);
-            QCOMPARE(velocity->value(), live.velocity[0]);
+            QCOMPARE(velocity->value(), (live.velocity[0] * 100 + 63) / 127);
             QVERIFY(key->isEnabled());
         }
         // A whole replay can finish before the next UI refresh.
@@ -453,6 +455,132 @@ class UiTests : public QObject {
         QCOMPARE(key->value(), live.transpose);
         QVERIFY(key->isEnabled());
     }
+    void velocityPercentControls() {
+        MainWindow window(true);
+        window.timer_.stop();
+        auto *left = window.findChild<QSpinBox *>("leftVelocity");
+        QCOMPARE(left->minimum(), 0);
+        QCOMPARE(left->maximum(), 100);
+        // Refreshing an imported MIDI value must not quantize stored data.
+        window.keyboard_.keymap.velocity = {81, 127};
+        window.syncPerformance(0);
+        QCOMPARE(left->value(), 64);
+        QCOMPARE(window.keyboard_.keymap.velocity[0], 81);
+        for (int percent : {0, 1, 100}) {
+            left->setValue(percent);
+            QCOMPARE(window.keyboard_.keymap.velocity[0], (percent * 127 + 50) / 100);
+        }
+        auto song = parseEop(fixture::changingKeyEop());
+        song.configurations[0].velocity[0].reset();
+        song.configurations[0].velocity[1] = 127;
+        window.setSong(song);
+        window.playbackConfiguration_ = true;
+        window.syncPerformance(0);
+        QCOMPARE(left->text(), QStringLiteral("未知"));
+        QCOMPARE(window.findChild<QSpinBox *>("rightVelocity")->value(), 100);
+        QCOMPARE(window.song_.events[0].velocity, song.events[0].velocity);
+    }
+    void chineseAudioButtons() {
+        MainWindow window(true);
+        window.timer_.stop();
+        QTimer::singleShot(0, [] {
+            auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            QVERIFY(dialog);
+            const auto close = qScopeGuard([dialog] {
+                if (dialog->isVisible())
+                    dialog->reject();
+            });
+            auto *buttons = dialog->findChild<QDialogButtonBox *>();
+            QVERIFY(buttons);
+            QCOMPARE(buttons->button(QDialogButtonBox::Ok)->text(), QStringLiteral("确定"));
+            QCOMPARE(buttons->button(QDialogButtonBox::Cancel)->text(), QStringLiteral("取消"));
+        });
+        window.audioSettings();
+    }
+    void musicalKeyEditor() {
+        MainWindow window(true);
+        window.timer_.stop();
+        // Every existing MIDI pitch opens without changing its meaning.
+        for (int midi : {0, 1, 60, 61, 127}) {
+            window.keyboard_.keymap.bindings[30].note = midi;
+            QTimer::singleShot(0, [midi] {
+                auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                QVERIFY(dialog);
+                const auto close = qScopeGuard([dialog] {
+                    if (dialog->isVisible())
+                        dialog->reject();
+                });
+                QCOMPARE(dialog->findChild<QLabel *>("notePreview")->text(), noteName(midi));
+                auto *buttons = dialog->findChild<QDialogButtonBox *>();
+                QCOMPARE(buttons->button(QDialogButtonBox::Ok)->text(), QStringLiteral("确定"));
+                buttons->button(QDialogButtonBox::Ok)->click();
+            });
+            window.editKey(30);
+            QCOMPARE(window.keyboard_.keymap.bindings[30].note, midi);
+        }
+        const QStringList names = {"C", "D", "E", "F", "G", "A", "B"};
+        const int semitones[] = {0, 2, 4, 5, 7, 9, 11};
+        for (int i = 0; i < 7; ++i) {
+            for (int accidental = -1; accidental <= 1; ++accidental) {
+                QTimer::singleShot(0, [&, i, accidental] {
+                    auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                    QVERIFY(dialog);
+                    const auto close = qScopeGuard([dialog] {
+                        if (dialog->isVisible())
+                            dialog->reject();
+                    });
+                    dialog->findChild<QPushButton *>("note" + names[i])->click();
+                    dialog->findChild<QSpinBox *>("noteOctave")->setValue(4);
+                    dialog->findChild<QComboBox *>("noteAccidental")->setCurrentIndex(accidental + 1);
+                    auto *buttons = dialog->findChild<QDialogButtonBox *>();
+                    QVERIFY(buttons->button(QDialogButtonBox::Ok)->isEnabled());
+                    buttons->button(QDialogButtonBox::Ok)->click();
+                });
+                window.editKey(30);
+                QCOMPARE(window.keyboard_.keymap.bindings[30].note, 60 + semitones[i] + accidental);
+            }
+        }
+        const int saved = window.keyboard_.keymap.bindings[30].note;
+        QTimer::singleShot(0, [] {
+            auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            QVERIFY(dialog);
+            const auto close = qScopeGuard([dialog] {
+                if (dialog->isVisible())
+                    dialog->reject();
+            });
+            auto *octave = dialog->findChild<QSpinBox *>("noteOctave");
+            auto *accidental = dialog->findChild<QComboBox *>("noteAccidental");
+            auto *ok = dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok);
+            dialog->findChild<QPushButton *>("noteC")->click();
+            octave->setValue(-1);
+            accidental->setCurrentIndex(0);
+            QVERIFY(!ok->isEnabled());
+            dialog->findChild<QPushButton *>("noteB")->click();
+            octave->setValue(9);
+            accidental->setCurrentIndex(2);
+            QVERIFY(!ok->isEnabled());
+            auto *type = dialog->findChild<QComboBox *>("bindingType");
+            type->setCurrentIndex(1);
+            QVERIFY(!octave->isEnabled());
+            QVERIFY(ok->isEnabled());
+            type->setCurrentIndex(2);
+            QVERIFY(ok->isEnabled());
+        });
+        window.editKey(30);
+        QCOMPARE(window.keyboard_.keymap.bindings[30].note, saved);
+        QTimer::singleShot(0, [] {
+            auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            QVERIFY(dialog);
+            const auto close = qScopeGuard([dialog] {
+                if (dialog->isVisible())
+                    dialog->reject();
+            });
+            dialog->findChild<QComboBox *>("bindingType")->setCurrentIndex(0);
+            QVERIFY(!dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+        });
+        window.editKey(42);
+        QVERIFY(!window.keyboard_.keymap.bindings.contains(42));
+    }
     void performanceControls() {
         MainWindow window(true);
         window.show();
@@ -467,7 +595,7 @@ class UiTests : public QObject {
         }
         for (const auto *name : {"leftVelocity", "rightVelocity"}) {
             auto *control = window.findChild<QSpinBox *>(name);
-            for (const int value : {1, 99, 100, 127}) {
+            for (const int value : {0, 1, 99, 100}) {
                 control->setValue(value);
                 const auto *edit = control->findChild<QLineEdit *>();
                 QVERIFY(edit->contentsRect().width() >=

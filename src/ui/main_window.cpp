@@ -2,6 +2,7 @@
 #include "platform/input.h"
 #include "ui/keyboard_view.h"
 #include <QApplication>
+#include <QButtonGroup>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
@@ -48,6 +49,12 @@ static void initializeGuide() {
 
 namespace piano {
 namespace {
+int velocityPercent(int midi) {
+    return (midi * 100 + 63) / 127;
+}
+int midiVelocity(int percent) {
+    return (percent * 127 + 50) / 100;
+}
 QString timeText(int64_t us) {
     const auto sec = us / 1000000;
     return QString("%1:%2").arg(sec / 60, 2, 10, QChar('0')).arg(sec % 60, 2, 10, QChar('0'));
@@ -487,16 +494,16 @@ void MainWindow::buildUi() {
         auto *octave = performanceSpin(-3, 3, keyboard_.keymap.octave[size_t(hand)], PerformanceSpin::Octave);
         octave->setObjectName(hand == 0 ? "leftOctave" : "rightOctave");
         handsRow->addWidget(field(hand == 0 ? "左手音区" : "右手音区", octave));
-        auto *velocity =
-            performanceSpin(1, 127, keyboard_.keymap.velocity[size_t(hand)], PerformanceSpin::Number);
+        auto *velocity = performanceSpin(0, 100, velocityPercent(keyboard_.keymap.velocity[size_t(hand)]),
+                                         PerformanceSpin::Number);
         velocity->setObjectName(hand == 0 ? "leftVelocity" : "rightVelocity");
-        handsRow->addWidget(field("力度", velocity));
+        handsRow->addWidget(field("力度（%）", velocity));
         connect(octave, &QSpinBox::valueChanged, this, [this, hand](int value) {
             keyboard_.keymap.octave[size_t(hand)] = value;
             updateProfile();
         });
         connect(velocity, &QSpinBox::valueChanged, this, [this, hand](int value) {
-            keyboard_.keymap.velocity[size_t(hand)] = value;
+            keyboard_.keymap.velocity[size_t(hand)] = midiVelocity(value);
             updateProfile();
         });
     }
@@ -891,11 +898,13 @@ void MainWindow::startPlayback() {
 }
 void MainWindow::syncPerformance(int64_t positionUs) {
     const auto *config = playbackConfiguration_ ? song_.configurationAt(positionUs) : nullptr;
-    const auto sync = [this, config](const char *name, std::optional<int> value, int live) {
+    const auto sync = [this, config](const char *name, std::optional<int> value, int live,
+                                     bool percent = false) {
         auto *control = findChild<QSpinBox *>(QLatin1String(name));
         QSignalBlocker blocker(control);
         control->setEnabled(!config);
-        control->setValue(config ? value.value_or(0) : live);
+        const int raw = config ? value.value_or(0) : live;
+        control->setValue(percent ? velocityPercent(raw) : raw);
         auto *edit = control->findChild<QLineEdit *>();
         // Force refresh even when restoring a value equal to the previous one.
         edit->setText(config && !value ? QStringLiteral("未知")
@@ -905,8 +914,8 @@ void MainWindow::syncPerformance(int64_t positionUs) {
          keyboard_.keymap.transpose);
     sync("leftOctave", config ? config->octave[0] : std::nullopt, keyboard_.keymap.octave[0]);
     sync("rightOctave", config ? config->octave[1] : std::nullopt, keyboard_.keymap.octave[1]);
-    sync("leftVelocity", config ? config->velocity[0] : std::nullopt, keyboard_.keymap.velocity[0]);
-    sync("rightVelocity", config ? config->velocity[1] : std::nullopt, keyboard_.keymap.velocity[1]);
+    sync("leftVelocity", config ? config->velocity[0] : std::nullopt, keyboard_.keymap.velocity[0], true);
+    sync("rightVelocity", config ? config->velocity[1] : std::nullopt, keyboard_.keymap.velocity[1], true);
 }
 void MainWindow::tick() {
     const auto status = audio_.status();
@@ -997,6 +1006,8 @@ void MainWindow::audioSettings() {
     hint->setWordWrap(true);
     form->addRow(hint);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    buttons->button(QDialogButtonBox::Ok)->setText("确定");
+    buttons->button(QDialogButtonBox::Cancel)->setText("取消");
     form->addRow(buttons);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
@@ -1022,24 +1033,74 @@ void MainWindow::editKey(uint16_t code) {
     if (it != keyboard_.keymap.bindings.end())
         binding = it->second;
     auto *type = new QComboBox;
+    type->setObjectName("bindingType");
     type->addItems({"音符", "延音踏板（双手）", "未分配"});
     type->setCurrentIndex(it == keyboard_.keymap.bindings.end() ? 2 : binding.sustain ? 1 : 0);
     form->addRow("功能", type);
-    auto *note = spin(0, 127, binding.note);
-    auto *name = new QLabel(noteName(binding.note));
+    static constexpr int semitones[] = {0, 2, 4, 5, 7, 9, 11};
+    const QStringList names = {"C", "D", "E", "F", "G", "A", "B"};
+    auto *notes = new QButtonGroup(&dialog);
     auto *noteRow = new QHBoxLayout;
-    noteRow->addWidget(note);
-    noteRow->addWidget(name);
-    form->addRow("MIDI 音高", noteRow);
-    connect(note, &QSpinBox::valueChanged, &dialog, [name](int n) { name->setText(noteName(n)); });
+    int initialNote = 0;
+    for (int i = 0; i < 7; ++i) {
+        auto *choice = new QPushButton(names[i]);
+        choice->setObjectName("note" + names[i]);
+        choice->setCheckable(true);
+        choice->setAutoDefault(false);
+        notes->addButton(choice, i);
+        noteRow->addWidget(choice);
+        if (semitones[i] <= binding.note % 12)
+            initialNote = i;
+    }
+    notes->button(initialNote)->setChecked(true);
+    form->addRow("音名", noteRow);
+    auto *octave = spin(-1, 9, binding.note / 12 - 1);
+    octave->setObjectName("noteOctave");
+    form->addRow("八度", octave);
+    auto *accidental = new QComboBox;
+    accidental->setObjectName("noteAccidental");
+    accidental->addItems({"降号 ♭", "还原 ♮", "升号 ♯"});
+    accidental->setCurrentIndex(binding.note % 12 == semitones[initialNote] ? 1 : 2);
+    form->addRow("升降号", accidental);
+    auto *name = new QLabel;
+    name->setObjectName("notePreview");
+    form->addRow("结果音名", name);
+    form->addRow(new QLabel("C4 为中央 C；八度表示音名所在的音区。"));
+    const auto pitch = [=] {
+        return 12 * (octave->value() + 1) + semitones[notes->checkedId()] + accidental->currentIndex() - 1;
+    };
     auto *hand = new QComboBox;
+    hand->setObjectName("bindingHand");
     hand->addItems({"左手", "右手", "不区分"});
     hand->setCurrentIndex(int(binding.hand));
     form->addRow("手部", hand);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    buttons->button(QDialogButtonBox::Ok)->setText("确定");
+    buttons->button(QDialogButtonBox::Cancel)->setText("取消");
     form->addRow(buttons);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    const auto refresh = [=] {
+        const bool isNote = type->currentIndex() == 0;
+        for (auto *choice : notes->buttons())
+            choice->setEnabled(isNote);
+        octave->setEnabled(isNote);
+        accidental->setEnabled(isNote);
+        const int n = pitch();
+        const bool valid = n >= 0 && n <= 127;
+        const QString suffix = accidental->currentIndex() == 0   ? QStringLiteral("♭")
+                               : accidental->currentIndex() == 2 ? QStringLiteral("♯")
+                                                                 : QString();
+        name->setText(!isNote ? QStringLiteral("—")
+                      : valid ? names[notes->checkedId()] + suffix + QString::number(octave->value())
+                              : QStringLiteral("超出支持的音高范围"));
+        buttons->button(QDialogButtonBox::Ok)->setEnabled((!isNote || valid) && code != 42 && code != 54);
+    };
+    connect(notes, &QButtonGroup::idClicked, &dialog, refresh);
+    connect(octave, &QSpinBox::valueChanged, &dialog, refresh);
+    connect(accidental, &QComboBox::currentIndexChanged, &dialog, refresh);
+    connect(type, &QComboBox::currentIndexChanged, &dialog, refresh);
+    refresh();
     if (code == 42 || code == 54) {
         auto *hint = new QLabel("Shift 是固定的力度修饰键，不支持重新分配。");
         form->addRow(hint);
@@ -1049,8 +1110,8 @@ void MainWindow::editKey(uint16_t code) {
         if (type->currentIndex() == 2)
             keyboard_.keymap.bindings.erase(code);
         else
-            keyboard_.keymap.bindings[code] = {code, note->value(), Hand(hand->currentIndex()),
-                                               type->currentIndex() == 1};
+            keyboard_.keymap.bindings[code] = {code, type->currentIndex() == 0 ? pitch() : binding.note,
+                                               Hand(hand->currentIndex()), type->currentIndex() == 1};
         updateProfile();
     }
     view_->setFocus();
@@ -1103,8 +1164,8 @@ void MainWindow::profileSettings() {
     sync("transpose", keyboard_.keymap.transpose);
     sync("leftOctave", keyboard_.keymap.octave[0]);
     sync("rightOctave", keyboard_.keymap.octave[1]);
-    sync("leftVelocity", keyboard_.keymap.velocity[0]);
-    sync("rightVelocity", keyboard_.keymap.velocity[1]);
+    sync("leftVelocity", velocityPercent(keyboard_.keymap.velocity[0]));
+    sync("rightVelocity", velocityPercent(keyboard_.keymap.velocity[1]));
     view_->setFocus();
 }
 void MainWindow::updateProfile() {
