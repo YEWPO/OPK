@@ -380,6 +380,79 @@ class UiTests : public QObject {
         QVERIFY(key->isEnabled());
         QCOMPARE(window.keyboard_.keymap.transpose, live.transpose);
     }
+    void replayPerformanceConfiguration() {
+        MainWindow window(true);
+        window.timer_.stop();
+        window.setSong(parseEop(fixture::changingKeyEop()));
+        auto *key = window.findChild<QSpinBox *>("transpose");
+        auto *velocity = window.findChild<QSpinBox *>("leftVelocity");
+        key->setValue(2); // Restore the user's setting, not a hardcoded C.
+        const auto live = window.keyboard_.keymap;
+        std::vector<float> block(4800 * 2);
+        for (int repeat = 0; repeat < 3; ++repeat) {
+            window.startPlayback();
+            const auto request = window.pendingPlayRequest_;
+            QVERIFY(request);
+            for (int refresh = 0; refresh < 3; ++refresh) {
+                window.tick(); // No audio callback has processed Play yet.
+                QCOMPARE(window.pendingPlayRequest_, request);
+                QCOMPARE(key->text(), QStringLiteral("Eb"));
+                QCOMPARE(velocity->value(), 40);
+                QVERIFY(!key->isEnabled());
+            }
+            window.audio_.render(block.data(), 4800);
+            window.tick();
+            QCOMPARE(window.pendingPlayRequest_, uint64_t(0));
+            QCOMPARE(key->text(), QStringLiteral("F"));
+            window.audio_.pause();
+            window.audio_.render(block.data(), 4800);
+            window.tick();
+            window.startPlayback();
+            window.tick();
+            QCOMPARE(key->text(), QStringLiteral("F"));
+            for (int i = 0; i < 6; ++i)
+                window.audio_.render(block.data(), 4800);
+            window.tick();
+            QVERIFY(!window.audio_.status().playing);
+            QCOMPARE(key->value(), live.transpose);
+            QCOMPARE(velocity->value(), live.velocity[0]);
+            QVERIFY(key->isEnabled());
+        }
+        // A whole replay can finish before the next UI refresh.
+        window.startPlayback();
+        for (int i = 0; i < 7; ++i)
+            window.audio_.render(block.data(), 4800);
+        window.tick();
+        QCOMPARE(window.pendingPlayRequest_, uint64_t(0));
+        QCOMPARE(key->value(), live.transpose);
+        QVERIFY(key->isEnabled());
+
+        window.startPlayback();
+        auto buttons = window.findChildren<QPushButton *>();
+        const auto stop = std::find_if(buttons.begin(), buttons.end(), [](auto *button) {
+            return button->text() == QStringLiteral("■ 停止");
+        });
+        QVERIFY(stop != buttons.end());
+        (*stop)->click();
+        window.audio_.render(block.data(), 4800);
+        window.tick();
+        QCOMPARE(window.pendingPlayRequest_, uint64_t(0));
+        QCOMPARE(key->value(), live.transpose);
+        QVERIFY(key->isEnabled());
+
+        window.startPlayback();
+        window.emergencyStop();
+        window.audio_.render(block.data(), 4800);
+        window.tick();
+        QCOMPARE(window.pendingPlayRequest_, uint64_t(0));
+        QVERIFY(key->isEnabled());
+        window.startPlayback();
+        window.setSong({});
+        window.tick();
+        QCOMPARE(window.pendingPlayRequest_, uint64_t(0));
+        QCOMPARE(key->value(), live.transpose);
+        QVERIFY(key->isEnabled());
+    }
     void performanceControls() {
         MainWindow window(true);
         window.show();

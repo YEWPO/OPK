@@ -28,6 +28,7 @@ struct Message {
     Command command = Command::Event;
     Event event;
     double value = 0;
+    uint64_t playRequest = 0;
 };
 constexpr size_t QueueSize = 4096;
 } // namespace
@@ -40,6 +41,8 @@ struct AudioEngine::Impl {
     std::atomic<size_t> write{0}, read{0};
     std::atomic<bool> emergency{false}, playingView{false};
     std::atomic<int64_t> positionView{0};
+    uint64_t nextPlayRequest = 0, processedPlayRequest = 0;
+    std::atomic<uint64_t> processedPlayRequestView{0};
     std::atomic<uint64_t> underruns{0}, overflows{0};
     std::atomic<uint64_t> nonFiniteSamples{0}, clippedSamples{0}, renderFailures{0};
     std::atomic<int> activeVoices{0};
@@ -140,6 +143,7 @@ struct AudioEngine::Impl {
                 silence(0, true);
                 break;
             case Command::Play:
+                processedPlayRequest = msg.playRequest;
                 if (!playing && !timeline.empty()) {
                     if (cursor == timeline.size()) {
                         cursor = 0;
@@ -230,6 +234,8 @@ struct AudioEngine::Impl {
         }
         positionView.store(int64_t(std::llround(position)), std::memory_order_relaxed);
         playingView.store(playing, std::memory_order_relaxed);
+        // Publish acknowledgement only after the resulting transport status.
+        processedPlayRequestView.store(processedPlayRequest, std::memory_order_release);
         nonFiniteSamples.fetch_add(invalid, std::memory_order_relaxed);
         clippedSamples.fetch_add(clipped, std::memory_order_relaxed);
         activeVoices.store(font ? fluid_synth_get_active_voice_count(font->synth) : 0,
@@ -425,8 +431,9 @@ bool AudioEngine::send(const Event &event) {
         return false;
     return p_->push({Command::Event, event, 0});
 }
-void AudioEngine::play() {
-    p_->push({Command::Play, {}, 0});
+uint64_t AudioEngine::play() {
+    const auto request = ++p_->nextPlayRequest;
+    return p_->push({Command::Play, {}, 0, request}) ? request : 0;
 }
 void AudioEngine::pause() {
     p_->push({Command::Pause, {}, 0});
@@ -449,6 +456,7 @@ void AudioEngine::setVolume(double v) {
         p_->push({Command::Volume, {}, v});
 }
 AudioStatus AudioEngine::status() const {
+    const auto processed = p_->processedPlayRequestView.load(std::memory_order_acquire);
     return {bool(p_->font),
             p_->playingView.load(),
             p_->stream && Pa_IsStreamActive(p_->stream) == 1,
@@ -460,7 +468,8 @@ AudioStatus AudioEngine::status() const {
             p_->nonFiniteSamples.load(),
             p_->clippedSamples.load(),
             p_->renderFailures.load(),
-            p_->activeVoices.load()};
+            p_->activeVoices.load(),
+            processed};
 }
 void AudioEngine::render(float *data, unsigned frames) {
     p_->process(data, frames);

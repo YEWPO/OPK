@@ -69,6 +69,9 @@ class MainWindow : public QMainWindow {
     void tick();
     void syncPerformance(int64_t positionUs);
     bool playbackConfiguration_ = false;
+    uint64_t pendingPlayRequest_ = 0;
+    int64_t pendingPlayPosition_ = 0;
+    void startPlayback();
     void toggleRecord();
     void finishRecord();
     bool maybeSave();

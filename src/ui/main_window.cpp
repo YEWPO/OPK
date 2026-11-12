@@ -426,11 +426,9 @@ void MainWindow::buildUi() {
             return;
         if (audio_.status().playing)
             audio_.pause();
-        else {
-            playbackConfiguration_ = !song_.configurations.empty();
-            audio_.play();
-        }
-        syncPerformance(audio_.status().positionUs);
+        else
+            startPlayback();
+        syncPerformance(pendingPlayRequest_ ? pendingPlayPosition_ : audio_.status().positionUs);
         view_->setFocus();
     });
     connect(stop, &QPushButton::clicked, this, [this] {
@@ -439,6 +437,7 @@ void MainWindow::buildUi() {
         else
             audio_.stop();
         playbackConfiguration_ = false;
+        pendingPlayRequest_ = 0;
         syncPerformance(0);
         view_->setFocus();
     });
@@ -623,6 +622,7 @@ void MainWindow::emergencyStop() {
     if (background_->isChecked())
         background_->setChecked(false);
     playbackConfiguration_ = false;
+    pendingPlayRequest_ = 0;
     syncPerformance(0);
     audio_.panic();
     statusBar()->showMessage("已止音，后台演奏已关闭。", 5000);
@@ -633,6 +633,7 @@ void MainWindow::setSong(Song song) {
     audio_.setSong(song);
     song_ = std::move(song);
     playbackConfiguration_ = false;
+    pendingPlayRequest_ = 0;
     syncPerformance(0);
     dirty_ = false;
     visualCursor_ = 0;
@@ -679,6 +680,7 @@ void MainWindow::toggleRecord() {
         return;
     releaseHeld();
     playbackConfiguration_ = false;
+    pendingPlayRequest_ = 0;
     syncPerformance(0);
     audio_.setSong({});
     song_ = {};
@@ -880,6 +882,13 @@ void MainWindow::startAudio(bool allowReload) {
     if (!notice.isEmpty())
         statusBar()->showMessage(notice, 20000);
 }
+void MainWindow::startPlayback() {
+    const auto status = audio_.status();
+    pendingPlayPosition_ = status.positionUs >= song_.durationUs() ? 0 : status.positionUs;
+    pendingPlayRequest_ = audio_.play();
+    playbackConfiguration_ = pendingPlayRequest_ && !song_.configurations.empty();
+    syncPerformance(pendingPlayPosition_);
+}
 void MainWindow::syncPerformance(int64_t positionUs) {
     const auto *config = playbackConfiguration_ ? song_.configurationAt(positionUs) : nullptr;
     const auto sync = [this, config](const char *name, std::optional<int> value, int live) {
@@ -916,6 +925,7 @@ void MainWindow::tick() {
         releaseHeld();
         audio_.shutdown();
         playbackConfiguration_ = false;
+        pendingPlayRequest_ = 0;
         statusBar()->showMessage("音频设备已停止，已清除演奏状态。请在音频设置中重连设备。", 15000);
     }
     wasAudioActive_ = status.active;
@@ -940,9 +950,11 @@ void MainWindow::tick() {
     while (visualCursor_ < song_.events.size() && song_.events[visualCursor_].timeUs <= status.positionUs)
         applyVisual(view_, song_.events[visualCursor_++], true);
     visualTime_ = status.positionUs;
-    if (!status.playing && status.positionUs >= song_.durationUs())
+    if (pendingPlayRequest_ && status.processedPlayRequest >= pendingPlayRequest_)
+        pendingPlayRequest_ = 0;
+    if (!pendingPlayRequest_ && !status.playing && status.positionUs >= song_.durationUs())
         playbackConfiguration_ = false;
-    syncPerformance(status.positionUs);
+    syncPerformance(pendingPlayRequest_ ? pendingPlayPosition_ : status.positionUs);
     view_->showPlayback = status.playing;
     view_->update();
     deviceLabel_->setText(status.active ? QString("%1 Hz · 报告缓冲延迟 %2 ms · 欠载 %3")

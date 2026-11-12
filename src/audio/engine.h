@@ -24,6 +24,7 @@ struct AudioStatus {
     uint64_t underruns = 0, overflows = 0;
     uint64_t nonFiniteSamples = 0, clippedSamples = 0, renderFailures = 0;
     int activeVoices = 0;
+    uint64_t processedPlayRequest = 0;
 };
 class AudioEngine {
   public:
@@ -41,7 +42,7 @@ class AudioEngine {
     void setSoundfont(std::shared_ptr<Soundfont> font); // stream stopped during swap
     void setSong(const Song &song);                     // copies/prepares outside callback, resets playback
     bool send(const Event &event);
-    void play();
+    uint64_t play(); // request ID; zero if the queue rejected the request
     void pause();
     void stop();
     void releaseLive();

@@ -15,8 +15,11 @@ class AudioTests : public QObject {
         song.events = {{0, Kind::NoteOn, 60, 90, Hand::Right}, {1000000, Kind::NoteOff, 60, 0, Hand::Right}};
         engine.setSong(song);
         std::vector<float> block(4800 * 2);
-        engine.play();
+        const auto firstRequest = engine.play();
+        QVERIFY(firstRequest);
+        QCOMPARE(engine.status().processedPlayRequest, uint64_t(0));
         engine.render(block.data(), 4800);
+        QCOMPARE(engine.status().processedPlayRequest, firstRequest);
         QCOMPARE(engine.status().positionUs, 100000);
         QVERIFY(engine.status().playing);
         engine.pause();
@@ -36,8 +39,11 @@ class AudioTests : public QObject {
             engine.render(block.data(), 4800);
         QVERIFY(!engine.status().playing);
         QVERIFY(engine.status().positionUs >= 1000000);
-        engine.play();
+        const auto replayRequest = engine.play();
+        QVERIFY(replayRequest > firstRequest);
+        QVERIFY(engine.status().processedPlayRequest < replayRequest);
         engine.render(block.data(), 4800);
+        QCOMPARE(engine.status().processedPlayRequest, replayRequest);
         QVERIFY(engine.status().playing);
         QCOMPARE(engine.status().positionUs, 200000);
     }
