@@ -75,11 +75,15 @@ const std::vector<PhysicalKey> &physicalKeys() {
                                          {52, ".", Qt::Key_Period, 4, 10.3, 1},
                                          {53, "/", Qt::Key_Slash, 4, 11.3, 1},
                                          {54, "Shift", Qt::Key_Shift, 4, 12.3, 2.7},
-                                         {29, "Ctrl", Qt::Key_Control, 5, 0, 1.5},
-                                         {56, "Alt", Qt::Key_Alt, 5, 2.5, 1.3},
-                                         {57, "Space · 延音", Qt::Key_Space, 5, 3.8, 6.5},
-                                         {312, "Alt", Qt::Key_AltGr, 5, 10.3, 1.3},
-                                         {285, "Ctrl", Qt::Key_Control, 5, 13.5, 1.5},
+                                         {29, "Ctrl", Qt::Key_Control, 5, 0, 1.25},
+                                         {0, "Fn", Qt::Key_unknown, 5, 1.25, 1},
+                                         {347, "Win", Qt::Key_Meta, 5, 2.25, 1},
+                                         {56, "Alt", Qt::Key_Alt, 5, 3.25, 1.25},
+                                         {57, "Space · 延音", Qt::Key_Space, 5, 4.5, 6},
+                                         {312, "Alt", Qt::Key_AltGr, 5, 10.5, 1.25},
+                                         {348, "Win", Qt::Key_Super_R, 5, 11.75, 1},
+                                         {349, "菜单", Qt::Key_Menu, 5, 12.75, 1},
+                                         {285, "Ctrl", Qt::Key_Control, 5, 13.75, 1.25},
                                          {69, "Num", Qt::Key_NumLock, 1, 16, 1},
                                          {309, "/", Qt::Key_division, 1, 17, 1},
                                          {55, "*", Qt::Key_multiply, 1, 18, 1},
@@ -87,14 +91,14 @@ const std::vector<PhysicalKey> &physicalKeys() {
                                          {71, "7", Qt::Key_Home, 2, 16, 1},
                                          {72, "8", Qt::Key_Up, 2, 17, 1},
                                          {73, "9", Qt::Key_PageUp, 2, 18, 1},
-                                         {78, "+", Qt::Key_Plus, 2, 19, 1},
+                                         {78, "+", Qt::Key_Plus, 2, 19, 1, 2},
                                          {75, "4", Qt::Key_Left, 3, 16, 1},
                                          {76, "5", Qt::Key_Clear, 3, 17, 1},
                                          {77, "6", Qt::Key_Right, 3, 18, 1},
                                          {79, "1", Qt::Key_End, 4, 16, 1},
                                          {80, "2", Qt::Key_Down, 4, 17, 1},
                                          {81, "3", Qt::Key_PageDown, 4, 18, 1},
-                                         {284, "↵", Qt::Key_Enter, 4, 19, 1},
+                                         {284, "↵", Qt::Key_Enter, 4, 19, 1, 2},
                                          {82, "0", Qt::Key_Insert, 5, 16, 2},
                                          {83, ".", Qt::Key_Delete, 5, 18, 1}};
         for (auto &k : keys)
@@ -112,6 +116,10 @@ const std::vector<PhysicalKey> &physicalKeys() {
     return keys;
 }
 QString keyName(uint16_t code) {
+    if (code == 347)
+        return QStringLiteral("左 Win");
+    if (code == 348)
+        return QStringLiteral("右 Win");
     for (const auto &k : physicalKeys())
         if (k.code == code)
             return (k.column >= 20 ? QStringLiteral("Num ") : QString()) + QString::fromUtf8(k.label);
@@ -155,12 +163,18 @@ uint16_t scanFromQt(int key, quint32 scan) {
         return 338;
     case 119:
         return 339;
+    case 133:
+        return 347;
+    case 134:
+        return 348;
+    case 135:
+        return 349;
     default:
         break;
     }
 #endif
     for (const auto &physical : physicalKeys())
-        if (physical.qtKey == key)
+        if (physical.code && physical.qtKey == key)
             return physical.code;
     return 0;
 }

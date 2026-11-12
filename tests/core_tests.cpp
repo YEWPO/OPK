@@ -10,10 +10,53 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <limits>
+#include <set>
 using namespace piano;
 class CoreTests : public QObject {
     Q_OBJECT
   private slots:
+    void physicalKeyboardLayout() {
+        const auto &keys = physicalKeys();
+        std::set<uint16_t> codes;
+        for (size_t i = 0; i < keys.size(); ++i) {
+            const auto &key = keys[i];
+            QVERIFY(codes.insert(key.code).second);
+            QVERIFY(key.width > 0 && key.height > 0);
+            const QRectF area(key.column, key.row, key.width, key.height);
+            for (size_t j = i + 1; j < keys.size(); ++j) {
+                const auto &other = keys[j];
+                QVERIFY(!area.intersects(QRectF(other.column, other.row, other.width, other.height)));
+            }
+        }
+        QCOMPARE(keyName(347), QStringLiteral("左 Win"));
+        QCOMPARE(keyName(348), QStringLiteral("右 Win"));
+        QCOMPARE(keyName(349), QStringLiteral("菜单"));
+        QCOMPARE(scanFromQt(Qt::Key_unknown, 0), uint16_t(0));
+        QCOMPARE(scanFromQt(Qt::Key_Return, 0), uint16_t(28));
+        QCOMPARE(scanFromQt(Qt::Key_Enter, 0), uint16_t(284));
+#ifdef Q_OS_LINUX
+        QCOMPARE(scanFromQt(Qt::Key_Meta, 133), uint16_t(347));
+        QCOMPARE(scanFromQt(Qt::Key_Meta, 134), uint16_t(348));
+        QCOMPARE(scanFromQt(Qt::Key_Menu, 135), uint16_t(349));
+        QCOMPARE(scanFromQt(Qt::Key_Plus, 86), uint16_t(78));
+        QCOMPARE(scanFromQt(Qt::Key_Enter, 104), uint16_t(284));
+#endif
+#ifdef Q_OS_WIN
+        for (auto code : {347, 348, 349, 78, 284, 28})
+            QCOMPARE(scanFromQt(Qt::Key_unknown, code), uint16_t(code));
+#endif
+        auto map = Keymap::defaults();
+        for (auto code : {0, 347, 348, 349})
+            QVERIFY(!map.bindings.contains(code));
+        for (auto code : {347, 348, 349})
+            map.bindings[code] = {uint16_t(code), 60, Hand::Left, false};
+        QTemporaryDir dir;
+        const auto path = dir.filePath("system-keys.json");
+        map.save(path);
+        const auto copy = Keymap::read(path);
+        for (auto code : {347, 348, 349})
+            QCOMPARE(copy.bindings.at(code).note, 60);
+    }
     void mergedKeyboardSources_data() {
         QTest::addColumn<int>("code");
         QTest::newRow("note") << 30;

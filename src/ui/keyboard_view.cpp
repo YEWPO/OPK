@@ -25,7 +25,7 @@ KeyboardView::KeyboardView(QWidget *parent) : QWidget(parent) {
 QRectF KeyboardView::keyRect(const PhysicalKey &key) const {
     const double unit = (width() - 24.) / 24.;
     const double h = std::clamp((height() - 220.) / 6., 34., 52.);
-    return {12 + key.column * unit, 34 + key.row * h, unit * key.width - 5, h - 5};
+    return {12 + key.column * unit, 34 + key.row * h, unit * key.width - 5, h * key.height - 5};
 }
 QRectF KeyboardView::pianoRect() const {
     return {12., height() - 156., width() - 24., 138.};
@@ -42,9 +42,10 @@ void KeyboardView::paintEvent(QPaintEvent *) {
     for (const auto &key : physicalKeys()) {
         const auto r = keyRect(key);
         const auto it = map.bindings.find(key.code);
-        const bool live =
-                       liveKeys.contains(key.code) || pressedKeys.contains(key.code) || mouseKey_ == key.code,
-                   hover = hoverKey_ == key.code, playing = showPlayback && playbackKeys.contains(key.code);
+        const bool live = key.code && (liveKeys.contains(key.code) || pressedKeys.contains(key.code) ||
+                                       mouseKey_ == key.code),
+                   hover = key.code && hoverKey_ == key.code,
+                   playing = key.code && showPlayback && playbackKeys.contains(key.code);
         QColor accent = muted;
         if (it != map.bindings.end())
             accent = it->second.hand == Hand::Left ? left : it->second.hand == Hand::Right ? right : muted;
@@ -148,12 +149,16 @@ int KeyboardView::hitNote(QPointF point) const {
 }
 uint16_t KeyboardView::hitKey(QPointF point, bool playableOnly) const {
     for (const auto &key : physicalKeys())
-        if (keyRect(key).contains(point) &&
+        if (key.code && keyRect(key).contains(point) &&
             (!playableOnly || map.bindings.contains(key.code) || key.code == 42 || key.code == 54))
             return key.code;
     return 0;
 }
 void KeyboardView::updateHover(QPointF point) {
+    const bool overFn = std::any_of(physicalKeys().begin(), physicalKeys().end(), [&](const auto &key) {
+        return !key.code && keyRect(key).contains(point);
+    });
+    setToolTip(overFn ? QStringLiteral("Fn 仅用于布局展示，不支持演奏或编辑。") : QString());
     hoverKey_ = hitKey(point);
     hoverNote_ = hitNote(point);
     setCursor(hoverKey_ || hoverNote_ >= 0 ? Qt::PointingHandCursor : Qt::ArrowCursor);

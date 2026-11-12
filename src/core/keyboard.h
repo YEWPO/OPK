@@ -10,12 +10,13 @@ struct Binding {
     bool sustain = false;
 };
 struct PhysicalKey {
-    uint16_t code;
+    uint16_t code; // zero marks a display-only key, never an input binding
     const char *label;
     int qtKey;
     int row;
     double column;
     double width;
+    double height = 1;
 };
 const std::vector<PhysicalKey> &physicalKeys();
 QString keyName(uint16_t code);

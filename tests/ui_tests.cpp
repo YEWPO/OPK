@@ -47,7 +47,7 @@ QPoint computerKeyPoint(const KeyboardView &view, uint16_t code) {
     const double unit = (view.width() - 24.) / 24.;
     const double height = std::clamp((view.height() - 220.) / 6., 34., 52.);
     return QPointF(12 + key->column * unit + (unit * key->width - 5) / 2,
-                   34 + key->row * height + (height - 5) / 2)
+                   34 + key->row * height + (height * key->height - 5) / 2)
         .toPoint();
 }
 QPoint pianoPoint(const KeyboardView &view, double whiteIndex, bool upper = false) {
@@ -183,6 +183,76 @@ class UiTests : public QObject {
             QCOMPARE(releases, 1);
             QTest::mouseRelease(&view, Qt::LeftButton, Qt::NoModifier, QPoint(-5, -5));
             QCOMPARE(releases, 1);
+        }
+    }
+    void tallKeyCaps() {
+        KeyboardView view;
+        view.show();
+        for (const auto size : {QSize(980, 440), QSize(1400, 620)}) {
+            view.resize(size);
+            for (uint16_t code : {uint16_t(78), uint16_t(284)}) {
+                int presses = 0, releases = 0;
+                uint16_t edited = 0, played = 0;
+                view.mouseKey = [&](uint16_t key, bool down) {
+                    played = key;
+                    down ? ++presses : ++releases;
+                };
+                view.editKey = [&](uint16_t key) { edited = key; };
+                const int halfRow = int(std::clamp((view.height() - 220.) / 6., 34., 52.) / 2);
+                const auto center = computerKeyPoint(view, code);
+                const auto top = center - QPoint(0, halfRow), bottom = center + QPoint(0, halfRow);
+                QTest::mousePress(&view, Qt::LeftButton, Qt::NoModifier, top);
+                QCOMPARE(played, code);
+                QCOMPARE(presses, 1);
+                moveMouse(view, bottom, true);
+                QCOMPARE(presses, 1);
+                QCOMPARE(releases, 0);
+                QTest::mouseRelease(&view, Qt::LeftButton, Qt::NoModifier, bottom);
+                QCOMPARE(releases, 1);
+                QTest::mouseClick(&view, Qt::LeftButton, Qt::NoModifier, bottom);
+                QCOMPARE(presses, 2);
+                QCOMPARE(played, code);
+                for (const auto point : {top, bottom}) {
+                    edited = 0;
+                    QTest::mouseClick(&view, Qt::RightButton, Qt::NoModifier, point);
+                    QCOMPARE(edited, code);
+                }
+                // The right-hand gap beside the key must remain inactive.
+                const auto gap = center + QPoint(int((view.width() - 24.) / 48.), 0);
+                QTest::mouseClick(&view, Qt::LeftButton, Qt::NoModifier, gap);
+                QCOMPARE(presses, 2);
+            }
+        }
+    }
+    void bottomRowKeys() {
+        KeyboardView view;
+        view.resize(1200, 520);
+        view.show();
+        int presses = 0;
+        uint16_t edited = 0;
+        view.mouseKey = [&](uint16_t, bool down) { presses += down; };
+        view.editKey = [&](uint16_t code) { edited = code; };
+        const auto fn = computerKeyPoint(view, 0);
+        moveMouse(view, fn, false);
+        QCOMPARE(view.cursor().shape(), Qt::ArrowCursor);
+        QVERIFY(view.toolTip().contains(QStringLiteral("仅用于布局展示")));
+        const auto before = view.grab().toImage();
+        QTest::mouseClick(&view, Qt::LeftButton, Qt::NoModifier, fn);
+        QTest::mouseClick(&view, Qt::RightButton, Qt::NoModifier, fn);
+        QCOMPARE(presses, 0);
+        QCOMPARE(edited, uint16_t(0));
+        QCOMPARE(view.grab().toImage(), before);
+        view.showPlayback = true;
+        view.liveKeys[0] = 1;
+        view.pressedKeys.insert(0);
+        view.playbackKeys[0] = 1;
+        QCOMPARE(view.grab().toImage(), before); // No accidental code-zero highlight.
+        for (uint16_t code : {uint16_t(347), uint16_t(348), uint16_t(349)}) {
+            const auto point = computerKeyPoint(view, code);
+            QTest::mouseClick(&view, Qt::LeftButton, Qt::NoModifier, point);
+            QCOMPARE(presses, 0); // Defaults do not consume system keys as notes.
+            QTest::mouseClick(&view, Qt::RightButton, Qt::NoModifier, point);
+            QCOMPARE(edited, code);
         }
     }
     void rightClickAndReset() {
