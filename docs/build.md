@@ -75,6 +75,6 @@ OPENKEYS_TEST_SOUNDFONT=/path/to/piano.sf2 ctest --test-dir build -R '^real_soun
 
 The standalone tool opens no audio device or network connection. It tests 44.1/48 kHz, A0–C8 at three velocities, sustain/release, and an embedded demo; it generates PCM16 WAV previews and a JSON report including the bank's hash and invalid/clipped-sample counters. This does not measure physical output latency or certify third-party sound quality. Unset integration-test input is marked skipped, not passed.
 
-Windows 安装界面统一使用简体中文（产品名和原始许可证正文除外）。快捷方式页独立提供桌面和开始菜单两个选项，默认均启用，不修改 PATH。静默安装可指定 `/DESKTOP=0|1` 和 `/STARTMENU=0|1`，`/D=安装路径` 必须放在最后。升级时沿用现有的卸载旧版本流程；卸载仅清理安装记录对应的快捷方式。
+Windows 安装界面统一使用简体中文（产品名和原始许可证正文除外）。快捷方式页独立提供桌面和开始菜单两个选项，默认均启用，不修改 PATH。静默安装可指定 `/DESKTOP=0|1` 和 `/STARTMENU=0|1`，`/D=安装路径` 必须放在最后。升级时沿用现有的卸载旧版本流程；卸载清理安装记录对应的快捷方式，并删除整个安装目录及其内容（包括自行放入的音源、曲谱等文件）；安装目录外的配置和音源不处理。目录被占用或权限不足时卸载返回失败，不显示成功。
 
 安装模板位于 `cmake/installer/NSIS.template.in`，基于 CMake CPack 模板修改；上游许可证随附为 `CMake-LICENSE.rst`。更换 CMake 版本后需要重新验证模板与 CPack 生成内容兼容。

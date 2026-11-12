@@ -39,14 +39,25 @@ if (($desktopLinks | Where-Object { Test-Path $_ }) -or (Find-StartMenuLinks)) {
     throw 'Use a clean worker: an OpenKeys Piano shortcut already exists.'
 }
 
-function Invoke-CheckedProcess([string]$Path, [string]$Arguments) {
+function Invoke-CheckedProcess([string]$Path, [string]$Arguments, [int]$ExpectedExitCode = 0) {
     $process = Start-Process -FilePath $Path -ArgumentList $Arguments -PassThru
     if (-not $process.WaitForExit(90000)) {
         $process.Kill($true)
         throw "Process timed out: $Path"
     }
-    if ($process.ExitCode -ne 0) {
+    if ($process.ExitCode -ne $ExpectedExitCode) {
         throw "Process failed ($($process.ExitCode)): $Path"
+    }
+}
+
+function Invoke-Uninstall([string]$Uninstaller, [int]$ExpectedExitCode = 0) {
+    $copy = Join-Path ([System.IO.Path]::GetTempPath()) ('OpenKeys-uninstall-' + [guid]::NewGuid().ToString('N') + '.exe')
+    try {
+        Copy-Item -LiteralPath $Uninstaller -Destination $copy
+        # _?= disables NSIS's asynchronous launcher; run a copy outside the target directory.
+        Invoke-CheckedProcess $copy "/S _?=$installRoot" $ExpectedExitCode
+    } finally {
+        Remove-Item -LiteralPath $copy -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -101,6 +112,8 @@ function Assert-Shortcut([string]$Path, [string]$Target) {
     Write-Host "Verified shortcut: $Path -> $actualTarget"
 }
 
+$outsideFile = $installRoot + '-outside.txt'
+Set-Content -LiteralPath $outsideFile -Value 'must survive uninstall' -Encoding UTF8
 $cases = @(
     @{ Options = ''; Desktop = 1; Menu = 1 },
     @{ Options = '/DESKTOP=1 /STARTMENU=1'; Desktop = 1; Menu = 1 },
@@ -117,6 +130,16 @@ foreach ($case in $cases) {
         Invoke-CheckedProcess $installer "/S $($case.Options) /D=$installRoot"
         $executable = Join-Path $installRoot 'openkeys.exe'
         if (-not (Test-Path $executable -PathType Leaf)) { throw 'Installed application is missing.' }
+        $payload = @(Get-ChildItem -LiteralPath $installRoot -Recurse -File | Select-Object -ExpandProperty FullName)
+        if (-not ($payload | Where-Object { $_ -like '*.dll' }) -or
+            -not (Test-Path (Join-Path $installRoot 'docs')) -or
+            -not (Test-Path (Join-Path $installRoot 'licenses'))) {
+            throw 'Expected installed DLLs, documentation and licenses for cleanup coverage.'
+        }
+        $extraDirectory = Join-Path $installRoot '用户添加\嵌套目录'
+        New-Item -ItemType Directory -Path $extraDirectory -Force | Out-Null
+        $extraFile = Join-Path $extraDirectory '测试曲谱.txt'
+        Set-Content -LiteralPath $extraFile -Value 'must be removed' -Encoding UTF8
         $desktop = @($desktopLinks | Where-Object { Test-Path $_ })
         $startMenu = @(Find-StartMenuLinks)
         if ($desktop.Count -ne $case.Desktop) { throw "Unexpected desktop shortcut count: $($desktop.Count)." }
@@ -126,23 +149,41 @@ foreach ($case in $cases) {
         $env:PATH = "$env:SystemRoot/System32;$env:SystemRoot"
         Invoke-CheckedProcess $executable '--smoke-test'
         foreach ($link in $installedLinks) { Invoke-CheckedProcess $link '--smoke-test' }
+        if ($case.Options -eq '') {
+            # Exercise uninstall-before-install with the old uninstaller running outside its directory.
+            Invoke-CheckedProcess $installer "/S /D=$installRoot"
+            if (Test-Path -LiteralPath $extraFile) { throw 'Upgrade did not clean the old installation directory.' }
+            Invoke-CheckedProcess $executable '--smoke-test'
+            New-Item -ItemType Directory -Path $extraDirectory -Force | Out-Null
+            Set-Content -LiteralPath $extraFile -Value 'must be removed' -Encoding UTF8
+        }
     } finally {
         $env:PATH = $originalPath
         if (Test-Path $uninstaller) {
-            Invoke-CheckedProcess $uninstaller '/S'
-            # NSIS launches its temporary uninstaller; the original process may exit first.
-            for ($attempt = 0; $attempt -lt 120; ++$attempt) {
-                $remainingLinks = @($installedLinks | Where-Object { Test-Path $_ })
-                if (-not (Test-Path $uninstaller) -and -not $remainingLinks) { break }
-                Start-Sleep -Milliseconds 500
+            if ($case.Options -eq '') {
+                # A sharing violation must fail visibly and leave a working retry entry point.
+                $lock = [System.IO.File]::Open($extraFile, 'Open', 'Read', 'Read')
+                try { Invoke-Uninstall $uninstaller 1 } finally { $lock.Dispose() }
+                if (-not (Test-Path -LiteralPath $extraFile) -or -not (Test-Path -LiteralPath $uninstaller)) {
+                    throw 'Failed uninstall must retain locked files and a retry uninstaller.'
+                }
             }
-            if ((Test-Path $uninstaller) -or (Test-Path (Join-Path $installRoot 'openkeys.exe')) -or
-                ($installedLinks | Where-Object { Test-Path $_ })) {
-                throw 'Uninstall did not remove the application and its shortcuts.'
-            }
+            Invoke-Uninstall $uninstaller
+        }
+        $remainingLinks = @($installedLinks | Where-Object { Test-Path -LiteralPath $_ })
+        $remainingFiles = @($payload | Where-Object { Test-Path -LiteralPath $_ })
+        if ((Test-Path -LiteralPath $installRoot) -or $remainingLinks -or $remainingFiles) {
+            $remaining = @(Get-ChildItem -LiteralPath $installRoot -Force -Recurse -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty FullName)
+            throw "Uninstall left installation contents or shortcuts: $($remaining + $remainingLinks -join ', ')"
+        }
+        if (-not (Test-Path -LiteralPath $outsideFile) -or
+            (Get-Content -LiteralPath $outsideFile -Raw).Trim() -ne 'must survive uninstall') {
+            throw 'Uninstall modified data outside the installation directory.'
         }
     }
 
 Write-Host "Verified shortcut options: $($case.Options)"
 }
-Write-Host 'Installer verified: Unicode/spaced path, defaults and all shortcut combinations, startup and uninstall.'
+Remove-Item -LiteralPath $outsideFile
+Write-Host 'Installer verified: Unicode/spaced path, defaults and all shortcut combinations, startup, locked-file failure and complete installation-directory removal.'
