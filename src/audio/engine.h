@@ -42,7 +42,8 @@ class AudioEngine {
     void setSoundfont(std::shared_ptr<Soundfont> font); // stream stopped during swap
     void setSong(const Song &song);                     // copies/prepares outside callback, resets playback
     bool send(const Event &event);
-    uint64_t play(); // request ID; zero if the queue rejected the request
+    uint64_t play();               // request ID; zero if the queue rejected the request
+    void seek(int64_t positionUs); // synchronous, preserves playing/paused state
     void pause();
     void stop();
     void releaseLive();

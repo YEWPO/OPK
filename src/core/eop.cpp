@@ -156,7 +156,7 @@ Song parseEop(const QByteArray &raw) {
         eventStart = base + 28 + 255 * 12 + 28;
         r.range(base, eventStart - base);
         const auto left = r.u32(base + 12), right = r.u32(base + 16);
-        if (left > 127 || right > 127)
+        if (left > 100 || right > 100)
             throw FileError("corrupt_eop", "Invalid v200 dynamics");
         for (int key = 1; key <= 255; ++key) {
             const qsizetype p = base + 28 + (key - 1) * 12;
@@ -170,7 +170,7 @@ Song parseEop(const QByteArray &raw) {
                     throw FileError("corrupt_eop", "Invalid v200 pitch");
                 m.notes.insert(uint8_t(note));
                 m.hand = action == 1 ? Hand::Right : Hand::Left;
-                m.velocity = int(action == 1 ? right : left);
+                m.velocity = int(((action == 1 ? right : left) * 127 + 50) / 100);
             } else
                 m.control = true;
             mappings.emplace(uint8_t(key), std::move(m));
@@ -233,8 +233,8 @@ Song parseEop(const QByteArray &raw) {
                 const auto velocity = r.u32(header + 12 + qsizetype(h) * 4);
                 if (octave >= -3 && octave <= 3)
                     config.octave[h] = octave;
-                if (velocity >= 1 && velocity <= 127)
-                    config.velocity[h] = int(velocity);
+                if (velocity <= 100)
+                    config.velocity[h] = int((velocity * 127 + 50) / 100);
             }
         }
         song.configurations.push_back(config);
@@ -294,12 +294,14 @@ Song parseEop(const QByteArray &raw) {
             e.note = uint8_t(shifted);
             e.hand = m.hand;
             e.velocity = uint8_t(e.kind == Kind::NoteOn && m.velocity >= 0 ? m.velocity : velocity);
+            if (e.kind == Kind::NoteOn && m.velocity == 0)
+                continue;
             song.events.push_back(e);
             pressed.push_back(e);
             if (song.events.size() > MaxEvents)
                 throw FileError("too_many_events", "Expanded EOP event limit exceeded");
         }
-        if (!pressed.empty())
+        if (status == 0x90 && !m.notes.empty())
             active[key].push_back(std::move(pressed));
     }
     validateSong(song);

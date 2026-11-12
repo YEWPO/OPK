@@ -22,6 +22,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPointer>
 #include <QProgressBar>
@@ -31,6 +32,7 @@
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QStatusBar>
+#include <QStyleOptionSlider>
 #include <QStyleOptionSpinBox>
 #include <QTextBrowser>
 #include <QUrl>
@@ -49,6 +51,44 @@ static void initializeGuide() {
 
 namespace piano {
 namespace {
+class PlaybackSlider : public QSlider {
+  public:
+    PlaybackSlider() : QSlider(Qt::Horizontal) {}
+
+  protected:
+    void positionAt(QMouseEvent *event) {
+        QStyleOptionSlider option;
+        initStyleOption(&option);
+        const auto groove =
+            style()->subControlRect(QStyle::CC_Slider, &option, QStyle::SC_SliderGroove, this);
+        const auto handle =
+            style()->subControlRect(QStyle::CC_Slider, &option, QStyle::SC_SliderHandle, this);
+        setSliderPosition(QStyle::sliderValueFromPosition(
+            minimum(), maximum(), int(event->position().x()) - groove.left() - handle.width() / 2,
+            std::max(1, groove.width() - handle.width()), option.upsideDown));
+    }
+    void mousePressEvent(QMouseEvent *event) override {
+        if (event->button() != Qt::LeftButton) {
+            event->ignore();
+            return;
+        }
+        setSliderDown(true);
+        positionAt(event);
+        event->accept();
+    }
+    void mouseMoveEvent(QMouseEvent *event) override {
+        if (isSliderDown())
+            positionAt(event);
+        event->accept();
+    }
+    void mouseReleaseEvent(QMouseEvent *event) override {
+        if (event->button() == Qt::LeftButton && isSliderDown()) {
+            positionAt(event);
+            setSliderDown(false);
+        }
+        event->accept();
+    }
+};
 int velocityPercent(int midi) {
     return (midi * 100 + 63) / 127;
 }
@@ -213,6 +253,7 @@ MainWindow::MainWindow(bool diagnostic, const QString &soundfontDirectory)
         }
     keyboard_.keymap.transpose = 0;
     keyboard_.keymap.octave = {0, 0};
+    keyboard_.keymap.velocity = {102, 127};
     config_.frames = settings_.value("audio/frames", 256).toInt();
     config_.exclusive = settings_.value("audio/exclusive", false).toBool();
     buildUi();
@@ -422,10 +463,19 @@ void MainWindow::buildUi() {
     timeLabel_->setMinimumWidth(110);
     row->addWidget(timeLabel_);
     transportLayout->addLayout(row);
-    progress_ = new QProgressBar;
+    progress_ = new PlaybackSlider;
+    progress_->setObjectName("playbackProgress");
+    progress_->setTracking(false);
     progress_->setRange(0, 1000);
     progress_->setValue(0);
-    progress_->setTextVisible(false);
+    connect(progress_, &QSlider::sliderMoved, this, [this](int value) {
+        timeLabel_->setText(timeText(song_.durationUs() * value / 1000) + " / " +
+                            timeText(song_.durationUs()));
+    });
+    connect(progress_, &QSlider::valueChanged, this, [this](int value) {
+        if (!progress_->isSliderDown())
+            seekPlayback(value);
+    });
     transportLayout->addWidget(progress_);
     root->addWidget(transport);
     connect(playButton_, &QPushButton::clicked, this, [this] {
@@ -444,6 +494,7 @@ void MainWindow::buildUi() {
         else
             audio_.stop();
         playbackConfiguration_ = false;
+        cancelSeekDrag();
         pendingPlayRequest_ = 0;
         syncPerformance(0);
         view_->setFocus();
@@ -629,6 +680,7 @@ void MainWindow::emergencyStop() {
     if (background_->isChecked())
         background_->setChecked(false);
     playbackConfiguration_ = false;
+    cancelSeekDrag();
     pendingPlayRequest_ = 0;
     syncPerformance(0);
     audio_.panic();
@@ -640,6 +692,7 @@ void MainWindow::setSong(Song song) {
     audio_.setSong(song);
     song_ = std::move(song);
     playbackConfiguration_ = false;
+    cancelSeekDrag();
     pendingPlayRequest_ = 0;
     syncPerformance(0);
     dirty_ = false;
@@ -687,6 +740,7 @@ void MainWindow::toggleRecord() {
         return;
     releaseHeld();
     playbackConfiguration_ = false;
+    cancelSeekDrag();
     pendingPlayRequest_ = 0;
     syncPerformance(0);
     audio_.setSong({});
@@ -889,6 +943,25 @@ void MainWindow::startAudio(bool allowReload) {
     if (!notice.isEmpty())
         statusBar()->showMessage(notice, 20000);
 }
+void MainWindow::cancelSeekDrag() {
+    if (progress_) {
+        QSignalBlocker block(progress_);
+        progress_->setSliderDown(false);
+    }
+}
+void MainWindow::seekPlayback(int value) {
+    if (recordingActive_ || song_.events.empty() || song_.durationUs() <= 0)
+        return;
+    audio_.seek(song_.durationUs() * value / 1000);
+    pendingPlayRequest_ = 0;
+    playbackConfiguration_ = !song_.configurations.empty();
+    visualTime_ = -1;
+    visualCursor_ = 0;
+    view_->playbackKeys.clear();
+    for (auto &notes : view_->playbackNotes)
+        notes.fill(0);
+    tick();
+}
 void MainWindow::startPlayback() {
     const auto status = audio_.status();
     pendingPlayPosition_ = status.positionUs >= song_.durationUs() ? 0 : status.positionUs;
@@ -934,6 +1007,7 @@ void MainWindow::tick() {
         releaseHeld();
         audio_.shutdown();
         playbackConfiguration_ = false;
+        cancelSeekDrag();
         pendingPlayRequest_ = 0;
         statusBar()->showMessage("音频设备已停止，已清除演奏状态。请在音频设置中重连设备。", 15000);
     }
@@ -942,10 +1016,14 @@ void MainWindow::tick() {
     playButton_->setText(status.playing ? "Ⅱ 暂停" : "▶ 播放");
     playButton_->setEnabled(!recordingActive_ && !song_.events.empty() && status.active);
     const auto pos = recordingActive_ ? recordingClock_.nsecsElapsed() / 1000 : status.positionUs;
-    timeLabel_->setText(timeText(pos) + " / " + timeText(song_.durationUs()));
-    progress_->setValue(song_.durationUs() > 0
-                            ? int(std::min<int64_t>(1000, status.positionUs * 1000 / song_.durationUs()))
-                            : 0);
+    progress_->setEnabled(!recordingActive_ && !song_.events.empty() && song_.durationUs() > 0);
+    if (!progress_->isSliderDown()) {
+        timeLabel_->setText(timeText(pos) + " / " + timeText(song_.durationUs()));
+        QSignalBlocker block(progress_);
+        progress_->setValue(song_.durationUs() > 0
+                                ? int(std::min<int64_t>(1000, status.positionUs * 1000 / song_.durationUs()))
+                                : 0);
+    }
     if (recordingActive_)
         recordLabel_->setText("● 录制中 · " + timeText(pos));
     if (recordingActive_ && pos >= MaxSongUs - 1000000)

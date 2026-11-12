@@ -66,9 +66,9 @@ struct AudioEngine::Impl {
         write.store(next, std::memory_order_release);
         return true;
     }
-    void silence(int source, bool clear) {
+    void silence(int source, bool clear, bool audible = true) {
         for (int c = source * 3; c < source * 3 + 3; ++c) {
-            if (font) {
+            if (font && audible) {
                 fluid_synth_cc(font->synth, c, 64, 0);
                 fluid_synth_all_sounds_off(font->synth, c);
             }
@@ -92,7 +92,7 @@ struct AudioEngine::Impl {
         read.store(write.load(std::memory_order_acquire), std::memory_order_release);
         emergency.store(false);
     }
-    void dispatch(const Event &event) {
+    void dispatch(const Event &event, bool audible = true) {
         const int c = std::clamp(int(event.source), 0, 1) * 3 + std::clamp(int(event.hand), 0, 2);
         const size_t channel = size_t(c), note = size_t(event.note);
         if (note >= 128)
@@ -103,13 +103,13 @@ struct AudioEngine::Impl {
             sustained[channel][note] = false;
             ++counts[channel][note];
             velocities[channel][note] = event.velocity;
-            if (font)
+            if (font && audible)
                 fluid_synth_noteon(font->synth, c, event.note, event.velocity);
             break;
         case Kind::NoteOff:
             if (counts[channel][note] > 0 && --counts[channel][note] == 0) {
                 sustained[channel][note] = pedals[channel] >= 64;
-                if (font)
+                if (font && audible)
                     fluid_synth_noteoff(font->synth, c, event.note);
             }
             break;
@@ -117,12 +117,24 @@ struct AudioEngine::Impl {
             pedals[channel] = event.velocity;
             if (event.velocity < 64)
                 sustained[channel].fill(false);
-            if (font)
+            if (font && audible)
                 fluid_synth_cc(font->synth, c, 64, event.velocity);
             break;
         case Kind::Panic:
-            silence(event.source, true);
+            silence(event.source, true, audible);
             break;
+        }
+    }
+    void restorePlayback() {
+        for (int c = 3; c < 6; ++c) {
+            if (font)
+                fluid_synth_cc(font->synth, c, 64, pedals[size_t(c)]);
+            for (int n = 0; n < 128; ++n)
+                if ((counts[size_t(c)][size_t(n)] || sustained[size_t(c)][size_t(n)]) && font) {
+                    fluid_synth_noteon(font->synth, c, n, velocities[size_t(c)][size_t(n)]);
+                    if (!counts[size_t(c)][size_t(n)])
+                        fluid_synth_noteoff(font->synth, c, n);
+                }
         }
     }
     void commands() {
@@ -150,16 +162,7 @@ struct AudioEngine::Impl {
                         position = 0;
                         silence(1, true);
                     }
-                    for (int c = 3; c < 6; ++c) {
-                        if (font)
-                            fluid_synth_cc(font->synth, c, 64, pedals[size_t(c)]);
-                        for (int n = 0; n < 128; ++n)
-                            if ((counts[size_t(c)][size_t(n)] || sustained[size_t(c)][size_t(n)]) && font) {
-                                fluid_synth_noteon(font->synth, c, n, velocities[size_t(c)][size_t(n)]);
-                                if (!counts[size_t(c)][size_t(n)])
-                                    fluid_synth_noteoff(font->synth, c, n);
-                            }
-                    }
+                    restorePlayback();
                     playing = true;
                 }
                 break;
@@ -434,6 +437,28 @@ bool AudioEngine::send(const Event &event) {
 uint64_t AudioEngine::play() {
     const auto request = ++p_->nextPlayRequest;
     return p_->push({Command::Play, {}, 0, request}) ? request : 0;
+}
+void AudioEngine::seek(int64_t positionUs) {
+    const bool active = p_->stream && Pa_IsStreamActive(p_->stream) == 1;
+    if (active)
+        Pa_StopStream(p_->stream);
+    p_->commands();
+    const auto duration = p_->timeline.empty() ? 0 : p_->timeline.back().timeUs;
+    const auto target = std::clamp<int64_t>(positionUs, 0, duration);
+    p_->silence(1, true);
+    p_->cursor = 0;
+    while (p_->cursor < p_->timeline.size() && p_->timeline[p_->cursor].timeUs <= target)
+        p_->dispatch(p_->timeline[p_->cursor++], false);
+    p_->position = double(target);
+    if (p_->cursor == p_->timeline.size())
+        p_->playing = false;
+    if (p_->playing)
+        p_->restorePlayback();
+    p_->positionView.store(target);
+    p_->playingView.store(p_->playing);
+    p_->processedPlayRequestView.store(p_->processedPlayRequest, std::memory_order_release);
+    if (active)
+        Pa_StartStream(p_->stream);
 }
 void AudioEngine::pause() {
     p_->push({Command::Pause, {}, 0});

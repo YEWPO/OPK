@@ -17,6 +17,7 @@
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QScopeGuard>
+#include <QSlider>
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QStatusBar>
@@ -98,7 +99,10 @@ class UiTests : public QObject {
             QCOMPARE(view->map.transpose, 0);
             QCOMPARE(view->map.octave[0], 0);
             QCOMPARE(view->map.octave[1], 0);
-            QCOMPARE(view->map.velocity[0], 65);
+            QCOMPARE(view->map.velocity[0], 102);
+            QCOMPARE(view->map.velocity[1], 127);
+            QCOMPARE(window.findChild<QSpinBox *>("leftVelocity")->value(), 80);
+            QCOMPARE(window.findChild<QSpinBox *>("rightVelocity")->value(), 100);
             QCOMPARE(view->map.bindings.at(30).note, 61);
             QCOMPARE(window.findChild<QSpinBox *>("transpose")->text(), QStringLiteral("C"));
             QCOMPARE(window.findChild<QSpinBox *>("leftOctave")->text(), QStringLiteral("原音区"));
@@ -351,7 +355,7 @@ class UiTests : public QObject {
         window.playbackConfiguration_ = true;
         window.syncPerformance(0);
         QCOMPARE(key->text(), QStringLiteral("Eb"));
-        QCOMPARE(velocity->value(), 31);
+        QCOMPARE(velocity->value(), 40);
         QVERIFY(!key->isEnabled());
         window.audio_.play();
         std::vector<float> block(4800 * 2);
@@ -399,7 +403,7 @@ class UiTests : public QObject {
                 window.tick(); // No audio callback has processed Play yet.
                 QCOMPARE(window.pendingPlayRequest_, request);
                 QCOMPARE(key->text(), QStringLiteral("Eb"));
-                QCOMPARE(velocity->value(), 31);
+                QCOMPARE(velocity->value(), 40);
                 QVERIFY(!key->isEnabled());
             }
             window.audio_.render(block.data(), 4800);
@@ -454,6 +458,47 @@ class UiTests : public QObject {
         QCOMPARE(window.pendingPlayRequest_, uint64_t(0));
         QCOMPARE(key->value(), live.transpose);
         QVERIFY(key->isEnabled());
+    }
+    void draggablePlaybackProgress() {
+        MainWindow window(true);
+        window.timer_.stop();
+        window.setSong(parseEop(fixture::changingKeyEop()));
+        window.tick();
+        auto *slider = window.findChild<QSlider *>("playbackProgress");
+        QVERIFY(slider && slider->isEnabled());
+        slider->resize(500, 30);
+        const auto before = window.audio_.status().positionUs;
+        QTest::mousePress(slider, Qt::LeftButton, Qt::NoModifier, QPoint(250, 15));
+        QVERIFY(slider->isSliderDown());
+        const auto preview = window.timeLabel_->text();
+        window.tick();
+        QCOMPARE(window.audio_.status().positionUs, before);
+        QCOMPARE(window.timeLabel_->text(), preview);
+        QTest::mouseRelease(slider, Qt::LeftButton, Qt::NoModifier, QPoint(250, 15));
+        QVERIFY(window.audio_.status().positionUs > 200000);
+        QVERIFY(!window.audio_.status().playing);
+        QCOMPARE(window.findChild<QSpinBox *>("transpose")->text(), QStringLiteral("F"));
+        window.startPlayback();
+        slider->setValue(700);
+        QVERIFY(window.audio_.status().playing);
+        QCOMPARE(window.audio_.status().positionUs, int64_t(350000));
+        QVERIFY(!window.view_->playbackKeys.empty());
+        slider->setValue(50);
+        QCOMPARE(window.findChild<QSpinBox *>("transpose")->text(), QStringLiteral("Eb"));
+        QCOMPARE(window.pendingPlayRequest_, uint64_t(0));
+        slider->setValue(1000);
+        QVERIFY(!window.audio_.status().playing);
+        QVERIFY(window.findChild<QSpinBox *>("transpose")->isEnabled());
+        window.startPlayback();
+        std::vector<float> block(4800 * 2);
+        window.audio_.render(block.data(), 4800);
+        QVERIFY(window.audio_.status().playing);
+        QTest::mousePress(slider, Qt::LeftButton, Qt::NoModifier, QPoint(350, 15));
+        window.setSong({});
+        QTest::mouseRelease(slider, Qt::LeftButton, Qt::NoModifier, QPoint(350, 15));
+        window.tick();
+        QCOMPARE(window.audio_.status().positionUs, int64_t(0));
+        QVERIFY(!slider->isEnabled());
     }
     void velocityPercentControls() {
         MainWindow window(true);

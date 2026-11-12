@@ -47,6 +47,49 @@ class AudioTests : public QObject {
         QVERIFY(engine.status().playing);
         QCOMPARE(engine.status().positionUs, 200000);
     }
+    void seekTransport() {
+        AudioEngine engine;
+        Song song;
+        song.events = {
+            {0, Kind::NoteOn, 60, 90, Hand::Right},       {100000, Kind::NoteOn, 60, 100, Hand::Right},
+            {200000, Kind::Sustain, 0, 127, Hand::Right}, {300000, Kind::NoteOff, 60, 0, Hand::Right},
+            {400000, Kind::NoteOff, 60, 0, Hand::Right},  {1000000, Kind::Sustain, 0, 0, Hand::Right}};
+        engine.setSong(song);
+        std::vector<float> block(4800 * 2);
+        engine.seek(350000);
+        QCOMPARE(engine.status().positionUs, int64_t(350000));
+        QVERIFY(!engine.status().playing);
+        const auto request = engine.play();
+        engine.seek(450000); // Pending Play is processed before preserving transport state.
+        QCOMPARE(engine.status().processedPlayRequest, request);
+        QVERIFY(engine.status().playing);
+        engine.render(block.data(), 4800);
+        QCOMPARE(engine.status().positionUs, int64_t(550000));
+        engine.pause();
+        engine.seek(50000);
+        QVERIFY(!engine.status().playing);
+        engine.render(block.data(), 4800);
+        QCOMPARE(engine.status().positionUs, int64_t(50000));
+        engine.setSpeed(2);
+        engine.play();
+        engine.seek(100000);
+        engine.render(block.data(), 4800);
+        QCOMPARE(engine.status().positionUs, int64_t(300000));
+        engine.seek(2000000);
+        QCOMPARE(engine.status().positionUs, song.durationUs());
+        QVERIFY(!engine.status().playing);
+        engine.play();
+        engine.render(block.data(), 4800);
+        QCOMPARE(engine.status().positionUs, int64_t(200000));
+        engine.seek(-100);
+        QCOMPARE(engine.status().positionUs, int64_t(0));
+        engine.stop();
+        engine.render(block.data(), 4800);
+        QCOMPARE(engine.status().positionUs, int64_t(0));
+        engine.setSong({});
+        engine.seek(500);
+        QCOMPARE(engine.status().positionUs, int64_t(0));
+    }
     void queueOverflowFailsSilent() {
         AudioEngine engine;
         bool overflow = false;
@@ -153,6 +196,24 @@ class AudioTests : public QObject {
         for (size_t i = 0; i < 9600; ++i)
             pedalEnergy += double(samples[i]) * samples[i];
         QVERIFY(pedalEnergy > .01);
+        // Seek into a pedal-held note, then backwards into a physically held note.
+        for (int64_t target : {int64_t(500000), int64_t(50000)}) {
+            engine.seek(target);
+            engine.render(samples.data(), 4800);
+            double seekEnergy = 0;
+            for (size_t i = 0; i < 9600; ++i)
+                seekEnergy += double(samples[i]) * samples[i];
+            QVERIFY(seekEnergy > .01);
+        }
+        engine.pause();
+        engine.seek(500000);
+        QVERIFY(!engine.status().playing);
+        engine.play();
+        engine.render(samples.data(), 4800);
+        double seekResumeEnergy = 0;
+        for (size_t i = 0; i < 9600; ++i)
+            seekResumeEnergy += double(samples[i]) * samples[i];
+        QVERIFY(seekResumeEnergy > .01);
     }
     void densePlaybackFailsSilent() {
         AudioEngine engine;

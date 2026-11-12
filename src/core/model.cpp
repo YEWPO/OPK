@@ -35,7 +35,7 @@ void validateSong(const Song &song) {
         configTime = c.timeUs;
         for (size_t h = 0; h < 2; ++h)
             if ((c.octave[h] && (*c.octave[h] < -3 || *c.octave[h] > 3)) ||
-                (c.velocity[h] && (*c.velocity[h] < 1 || *c.velocity[h] > 127)))
+                (c.velocity[h] && (*c.velocity[h] < 0 || *c.velocity[h] > 127)))
                 throw FileError("corrupt_events", "Invalid performance configuration value");
     }
     if (song.events.size() > MaxEvents)

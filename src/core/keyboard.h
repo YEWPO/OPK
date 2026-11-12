@@ -24,7 +24,7 @@ struct Keymap {
     std::map<uint16_t, Binding> bindings;
     int transpose = 0;
     std::array<int, 2> octave{0, 0};
-    std::array<int, 2> velocity{80, 100};
+    std::array<int, 2> velocity{102, 127};
     static Keymap defaults();
     static Keymap read(const QString &path);
     void save(const QString &path) const;

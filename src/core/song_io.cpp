@@ -73,7 +73,7 @@ Song readRecording(const QByteArray &data) {
                 if (item.contains(octave))
                     config.octave[h] = int(integer(item, octave, -3, 3));
                 if (item.contains(velocity))
-                    config.velocity[h] = int(integer(item, velocity, 1, 127));
+                    config.velocity[h] = int(integer(item, velocity, 0, 127));
             }
             song.configurations.push_back(config);
         }

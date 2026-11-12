@@ -13,6 +13,7 @@ class QLabel;
 class QPushButton;
 class QCheckBox;
 class QProgressBar;
+class QSlider;
 class QDoubleSpinBox;
 class QCloseEvent;
 class UiTests;
@@ -45,7 +46,8 @@ class MainWindow : public QMainWindow {
            *recordLabel_ = nullptr;
     QPushButton *playButton_ = nullptr, *recordButton_ = nullptr, *fontButton_ = nullptr;
     QCheckBox *background_ = nullptr;
-    QProgressBar *progress_ = nullptr, *importProgress_ = nullptr;
+    QProgressBar *importProgress_ = nullptr;
+    QSlider *progress_ = nullptr;
     QDoubleSpinBox *speed_ = nullptr;
     bool recordingActive_ = false, dirty_ = false, diagnostic_ = false, loading_ = false;
     int mouseHeld_ = -1;
@@ -72,6 +74,8 @@ class MainWindow : public QMainWindow {
     uint64_t pendingPlayRequest_ = 0;
     int64_t pendingPlayPosition_ = 0;
     void startPlayback();
+    void seekPlayback(int value);
+    void cancelSeekDrag();
     void toggleRecord();
     void finishRecord();
     bool maybeSave();

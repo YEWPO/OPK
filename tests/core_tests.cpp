@@ -178,6 +178,35 @@ class CoreTests : public QObject {
         s.events = {{-1, Kind::NoteOn, 60, 80, Hand::Left}, {20, Kind::NoteOff, 60, 0, Hand::Left}};
         QVERIFY_EXCEPTION_THROWN(validateSong(s), FileError);
     }
+    void eopPercentageDynamics() {
+        for (int percent : {0, 80, 100, 101}) {
+            auto raw = fixture::decodedEop(301);
+            fixture::u32(raw, 0x1bc + 12, percent);
+            fixture::u32(raw, 0x1bc + 16, percent);
+            auto song = parseEop(fixture::encode(raw));
+            QCOMPARE(song.events[0].velocity, 90); // Per-event MIDI value is unchanged.
+            if (percent > 100) {
+                QVERIFY(!song.configurations[0].velocity[0]);
+            } else {
+                QCOMPARE(song.configurations[0].velocity[0].value(), (percent * 127 + 50) / 100);
+                QTemporaryDir dir;
+                const auto path = dir.filePath("percent.eopiano.json");
+                saveRecording(path, song);
+                QCOMPARE(readSong(path).configurations[0].velocity[0], song.configurations[0].velocity[0]);
+            }
+            raw = fixture::decodedEop(200);
+            fixture::u32(raw, 0x1b8 + 12, percent);
+            if (percent > 100) {
+                QVERIFY_EXCEPTION_THROWN(parseEop(fixture::encode(raw, true)), FileError);
+            } else {
+                song = parseEop(fixture::encode(raw, true));
+                if (percent == 0)
+                    QVERIFY(song.events.empty());
+                else
+                    QCOMPARE(song.events[0].velocity, (percent * 127 + 50) / 100);
+            }
+        }
+    }
     void eopChangingKey() {
         const auto song = parseEop(fixture::changingKeyEop());
         QCOMPARE(song.events.size(), size_t(4));
@@ -190,7 +219,7 @@ class CoreTests : public QObject {
         QCOMPARE(song.configurations[1].transpose, 4);
         QCOMPARE(song.configurationAt(100000)->transpose, 5);
         QCOMPARE(song.configurationAt(0)->octave[0].value(), -1);
-        QCOMPARE(song.configurationAt(0)->velocity[0].value(), 40);
+        QCOMPARE(song.configurationAt(0)->velocity[0].value(), 51);
         QVERIFY(song.warnings.empty());
         QTemporaryDir dir;
         const auto path = dir.filePath("changed.eopiano.json");
@@ -198,7 +227,7 @@ class CoreTests : public QObject {
         const auto copy = readSong(path);
         QCOMPARE(copy.configurationAt(100000)->transpose, 5);
         QCOMPARE(copy.events[2].note, 65);
-        QCOMPARE(copy.configurationAt(0)->velocity[1].value(), 60);
+        QCOMPARE(copy.configurationAt(0)->velocity[1].value(), 76);
         auto invalid = song;
         invalid.configurations.back().timeUs = -1;
         QVERIFY_EXCEPTION_THROWN(validateSong(invalid), FileError);
@@ -210,8 +239,8 @@ class CoreTests : public QObject {
         const auto song = readSong(path);
         QCOMPARE(song.configurationAt(0)->transpose, 3);
         QCOMPARE(song.configurationAt(155883000)->transpose, 5);
-        QCOMPARE(song.configurationAt(0)->velocity[0].value(), 40);
-        QCOMPARE(song.configurationAt(0)->velocity[1].value(), 60);
+        QCOMPARE(song.configurationAt(0)->velocity[0].value(), 51);
+        QCOMPARE(song.configurationAt(0)->velocity[1].value(), 76);
         QVERIFY(song.warnings.empty());
     }
     void eopVersions_data() {
@@ -229,7 +258,7 @@ class CoreTests : public QObject {
         QCOMPARE(song.events[1].timeUs, 500000);
         QCOMPARE(song.title, QStringLiteral("Fixture song"));
         if (version == 200) {
-            QCOMPARE(song.events[0].velocity, 70);
+            QCOMPARE(song.events[0].velocity, 89);
             QCOMPARE(song.events[0].hand, Hand::Left);
         }
     }

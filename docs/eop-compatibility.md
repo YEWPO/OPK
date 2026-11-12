@@ -38,3 +38,9 @@ First release reads EOP only. Native recordings use versioned `.eopiano.json`; E
 Tests build synthetic containers for each supported version, multi-layer maps, the v201 zero-section variants, v200 dynamics, malformed offsets/events, truncation, and 3,000 deterministic single-byte mutations. These exercise parser behavior but do not establish coverage across a real-world EOP corpus.
 
 Before declaring a Windows release fully EOP-compatible, compare locally supplied or appropriately licensed real samples with Everyone Piano: note order, pitch, key highlights, timing, velocity and ending behavior. Keep third-party music out of the source repository unless redistribution permission is known. Any remaining unsupported controls/layouts must remain visible in release notes.
+
+### Dynamics scale and seeking
+
+EOP per-hand header dynamics use 0–100 percent: v301 configuration values and v200 mapped-note dynamics are converted to MIDI 0–127 with rounding. Zero is a known silent setting; v200 silent presses retain release matching but generate no notes. Out-of-range v301 values remain unknown; invalid v200 dynamics are rejected. Per-event velocities retain MIDI semantics. Native configuration dynamics remain MIDI values and now also accept zero; existing native files are not reinterpreted.
+
+Playback seeking preserves play/pause state and reconstructs held notes, pedal state, keyboard highlights and configuration at the destination. Dragging previews the target time and seeks on release. Seeking to the end completes playback; Play then restarts from the beginning.
