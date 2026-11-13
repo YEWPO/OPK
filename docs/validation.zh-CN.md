@@ -28,6 +28,8 @@ python3 tools/verify_resources.py
 
 AddressSanitizer 和 UndefinedBehaviorSanitizer 检查采用 `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1`。当前环境的 ptrace 限制使 LeakSanitizer 无法运行，因此不宣称完成泄漏检测。Windows CI 自动验证静默安装、升级、快捷方式和卸载；实体输出及交互界面仍需实机验收。
 
+推送 `v*` 标签时运行相同的 Linux 和 Windows 检查。仅当两个作业都成功后，发布任务才下载已验证的 Windows 工件、生成 SHA-256 校验和并发布 GitHub Release。因此发布只代表自动构建、打包、安装器、快捷方式和卸载检查通过，不代表下方待完成的 Windows 实机验收已经完成。
+
 ## Windows 实机验收（待完成）
 
 目标为 Windows 11 x64 和 Windows 10 22H2 x64。记录系统版本、CPU、内存、音源校验和、键盘、音频设备/驱动、有线输出类型、共享/独占模式、采样率及缓冲。

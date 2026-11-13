@@ -8,6 +8,10 @@ Play with both hands, view all 88 piano keys, edit key mappings, use sustain and
 
 ![OpenKeys Piano in English](docs/preview.png)
 
+## Download
+
+Version 0.1.0 is available from [GitHub Releases](https://github.com/YEWPO/OPK/releases/tag/v0.1.0) as a Windows x64 NSIS installer or portable ZIP, together with SHA-256 checksums. The installer is not code-signed, so Windows SmartScreen may ask for confirmation. No soundfont is bundled; import your own SF2 after installation. Linux is source-only in this release; see [Build and Packaging](docs/build.md).
+
 ## First use: import a soundfont
 
 **No soundfont is bundled or automatically downloaded.** Choose **Import Soundfont**, select your own extracted `.sf2` file, and wait for copying and loading to finish.

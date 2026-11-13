@@ -8,6 +8,10 @@
 
 ![OpenKeys Piano 中文界面](docs/preview.zh-CN.png)
 
+## 下载
+
+v0.1.0 已通过 [GitHub Releases](https://github.com/YEWPO/OPK/releases/tag/v0.1.0) 发布，提供 Windows x64 的 NSIS 安装器或便携 ZIP，并附 SHA-256 校验和。安装器未进行代码签名，Windows SmartScreen 可能要求确认。安装包不附带音源，请安装后自行导入 SF2。本版 Linux 仅支持源码构建，见 [构建文档](docs/build.zh-CN.md)。
+
 ## 首次使用：导入音源
 
 **软件不附带音源，也不会自动下载。** 启动后点击 **导入音源**，选择自己准备的 `.sf2` 文件，等待复制和加载完成即可演奏。

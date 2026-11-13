@@ -26,6 +26,8 @@ Local automated validation uses Linux with Qt 6.11.2, FluidSynth 2.6.1 and PortA
 
 AddressSanitizer and UndefinedBehaviorSanitizer checks use `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1`. LeakSanitizer cannot run in this environment's ptrace restrictions, so leak detection is not claimed. Windows CI automatically verifies silent installation, upgrade, shortcuts and uninstall. Physical output, interactive installer pages and DPI behavior still require real-machine acceptance.
 
+Tag pushes run the same Linux and Windows checks. A release job runs only after both jobs succeed, downloads the verified Windows artifact, writes SHA-256 checksums, and publishes the GitHub Release. Publication therefore means the automated build, packaging, installer, shortcut and uninstall checks passed; it does not mean the pending Windows real-machine acceptance below has been completed.
+
 ## Windows real-machine acceptance (pending)
 
 Target Windows 11 x64 and Windows 10 22H2 x64. Record OS build, CPU, RAM, soundfont checksum, keyboard, audio device/driver, wired output type, shared/exclusive mode, sample rate and buffer size.
