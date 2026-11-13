@@ -38,7 +38,7 @@ ctest --preset windows-release
 ./tools/package_windows.ps1
 ```
 
-vcpkg 清单固定基线 `ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0`。依赖需要安装或存在于构建缓存中，项目从不下载乐器采样。`windows-release` 使用只构建 Release 依赖的覆盖 triplet；`windows-dev` 保留 Debug/Release。CI 在测试前保存编译依赖缓存，明确设置 Qt 插件及 DLL 搜索目录。
+vcpkg 清单固定基线 `ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0`。依赖需要安装或存在于构建缓存中，项目从不下载乐器采样。`windows-release` 使用只构建 Release 依赖的覆盖 triplet；`windows-dev` 保留 Debug/Release。CI 优先恢复对应清单及 triplet 的最新依赖缓存，未命中时回退到旧 Windows 缓存，由 vcpkg 检查包 ABI 后复用。每次运行在配置后保存更新的缓存，配置失败或取消时也保存已有的包。测试明确设置 Qt 插件及 DLL 搜索目录。
 
 打包脚本构建并测试，部署到新的暂存目录，检查无 SF2/SF3，启动暂存应用，然后在 `dist/` 生成 NSIS 和 ZIP。Qt 部署与 CMake 安装所需 DLL、平台插件和第三方声明。未配置用户音源时，可选真实 SF2 测试明确跳过。
 
@@ -48,7 +48,7 @@ CI 在一次性 Windows 机器执行 `tools/verify_windows_installer.ps1`，覆�
 
 ## 应用图标
 
-`assets/icons/openkeys.svg` 是唯一可编辑源，采用简洁黑白钢琴键。7 个尺寸的 PNG 及多分辨率 `openkeys.ico` 已纳入仓库，普通构建无需图像转换工具。Qt 嵌入 PNG，Windows 程序及安装/卸载程序使用 ICO。
+`assets/icons/openkeys.svg` 是唯一可编辑源：深色圆角底上展示 C 到高音 C 的完整八度，包含 8 个修长白键和按“2＋3”分组的 5 个黑键。黑键长度约为白键的 60%，不加字母或装饰条。7 个尺寸的 PNG 及多分辨率 `openkeys.ico` 已纳入仓库，普通构建无需图像转换工具。Qt 嵌入 PNG，Windows 程序、快捷方式及安装/卸载程序使用 ICO。
 
 修改 SVG 后，安装 librsvg 的 `rsvg-convert` 和 Python Pillow，再运行：
 
@@ -56,7 +56,7 @@ CI 在一次性 Windows 机器执行 `tools/verify_windows_installer.ps1`，覆�
 python3 tools/generate_icons.py
 ```
 
-所有 16、24、32、48、64、128、256 像素导出和 ICO 必须同步更新，检查小尺寸辨识度及透明边缘。
+导出尺寸为 16、24、32、48、64、128 和 256 像素，均需与 SVG 同步。资源检查验证琴键数量和位置、透明圆角、各尺寸黑键的可辨认性及 ICO 与 PNG 像素一致性。
 
 ## 音源应用副本
 

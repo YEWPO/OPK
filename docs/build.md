@@ -40,7 +40,7 @@ ctest --preset windows-release
 
 The vcpkg manifest pins registry baseline `ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0`. Dependencies still need to be installed or available in the build cache. The project never downloads instrument samples.
 
-The `windows-release` preset uses an overlay triplet that builds only Release dependency libraries. The `windows-dev` preset retains both Debug and Release libraries. CI saves compiled dependencies before running application tests and explicitly supplies Qt's plugin and DLL directories to the test processes.
+The `windows-release` preset uses an overlay triplet that builds only Release dependency libraries. The `windows-dev` preset retains both Debug and Release libraries. CI restores the newest compiled dependency cache for the manifest/triplet, falling back to older Windows caches; vcpkg checks package ABIs before reuse. Each run saves an updated cache after configuration, including available packages if configuration fails or is cancelled. CI explicitly supplies Qt's plugin and DLL directories to the test processes.
 
 The packaging script builds and tests, deploys into a fresh staging directory, verifies no SF2/SF3 files are present, runs the staged executable, and produces NSIS/ZIP artifacts in `dist/`. Qt deployment and CMake install the required DLLs/platform plugins and dependency notices. The optional real-SF2 check is skipped when no user bank is configured.
 
@@ -50,13 +50,13 @@ The NSIS install-options page defaults to creating the **OpenKeys Piano** deskto
 
 ### Application icon assets
 
-`assets/icons/openkeys.svg` is the editable icon source. Its PNG exports and multi-resolution `openkeys.ico` are checked in, so ordinary builds need no image conversion tools. Qt embeds the PNG sizes; the Windows executable resource and NSIS installer/uninstaller use the ICO. To regenerate after editing the SVG, install `rsvg-convert` (librsvg) and Python Pillow, then run:
+`assets/icons/openkeys.svg` is the editable icon source: a full octave from C to high C, with eight slender white keys and five black keys in two-plus-three groups on a dark rounded background. Black keys are about 60% of the white-key length, with no lettering or decorative bars. Its PNG exports and multi-resolution `openkeys.ico` are checked in, so ordinary builds need no image conversion tools. Qt embeds the PNG sizes; the Windows executable resource, shortcuts and NSIS installer/uninstaller use the ICO. To regenerate after editing the SVG, install `rsvg-convert` (librsvg) and Python Pillow, then run:
 
 ```sh
 python3 tools/generate_icons.py
 ```
 
-The exported sizes are 16, 24, 32, 48, 64, 128 and 256 pixels. Keep every export synchronized with the SVG.
+The exported sizes are 16, 24, 32, 48, 64, 128 and 256 pixels. Keep every export synchronized with the SVG. Resource verification checks key counts and placement, transparent corners, distinguishable black keys at every size, and matching ICO/PNG pixels.
 
 ## Imported instrument storage
 

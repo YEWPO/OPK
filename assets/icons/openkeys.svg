@@ -1,15 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
   <title>OpenKeys Piano</title>
-  <desc>Three ivory piano keys and two black keys on a dark rounded square.</desc>
-  <rect x="8" y="8" width="240" height="240" rx="48" fill="#111e30"/>
-  <rect x="32" y="38" width="192" height="180" rx="14" fill="#080f1b"/>
-  <g fill="#f1f3ee">
-    <rect x="40" y="46" width="54" height="164" rx="7"/>
-    <rect x="101" y="46" width="54" height="164" rx="7"/>
-    <rect x="162" y="46" width="54" height="164" rx="7"/>
+  <desc>A full octave from C to high C: eight slender white keys and five black keys in groups of two and three on a dark rounded square.</desc>
+  <rect x="8" y="8" width="240" height="240" rx="40" fill="#111e30"/>
+  <g id="white-keys" fill="#f1f3ee">
+    <rect x="20" y="32" width="25" height="192" rx="3"/>
+    <rect x="47" y="32" width="25" height="192" rx="3"/>
+    <rect x="74" y="32" width="25" height="192" rx="3"/>
+    <rect x="101" y="32" width="25" height="192" rx="3"/>
+    <rect x="128" y="32" width="25" height="192" rx="3"/>
+    <rect x="155" y="32" width="25" height="192" rx="3"/>
+    <rect x="182" y="32" width="25" height="192" rx="3"/>
+    <rect x="209" y="32" width="25" height="192" rx="3"/>
   </g>
-  <g fill="#111e30">
-    <rect x="77" y="42" width="38" height="103" rx="5"/>
-    <rect x="139" y="42" width="38" height="103" rx="5"/>
+  <g id="black-keys" fill="#080f1b">
+    <rect x="38" y="32" width="16" height="116" rx="2"/>
+    <rect x="65" y="32" width="16" height="116" rx="2"/>
+    <rect x="119" y="32" width="16" height="116" rx="2"/>
+    <rect x="146" y="32" width="16" height="116" rx="2"/>
+    <rect x="173" y="32" width="16" height="116" rx="2"/>
   </g>
 </svg>

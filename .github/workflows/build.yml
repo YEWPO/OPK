@@ -40,10 +40,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Cache compiled dependencies
         id: dependency-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: vcpkg-cache
-          key: vcpkg-win64-${{ hashFiles('vcpkg.json', 'tools/triplets/**') }}
+          key: vcpkg-win64-${{ hashFiles('vcpkg.json', 'tools/triplets/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            vcpkg-win64-${{ hashFiles('vcpkg.json', 'tools/triplets/**') }}-
+            vcpkg-win64-${{ hashFiles('vcpkg.json', 'tools/triplets/**') }}
+            vcpkg-win64-
       - name: Bootstrap pinned vcpkg
         shell: pwsh
         run: |
@@ -54,11 +58,11 @@ jobs:
       - name: Configure
         run: cmake --preset windows-release
       - name: Save compiled dependencies
-        if: steps.dependency-cache.outputs.cache-hit != 'true'
+        if: always() && steps.dependency-cache.outcome == 'success'
         uses: actions/cache/save@v4
         with:
           path: vcpkg-cache
-          key: vcpkg-win64-${{ hashFiles('vcpkg.json', 'tools/triplets/**') }}
+          key: ${{ steps.dependency-cache.outputs.cache-primary-key }}
       - name: Build
         run: cmake --build --preset windows-release --parallel 4
       - name: Test

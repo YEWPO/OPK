@@ -58,13 +58,40 @@ def main():
             source = "".join(json.loads(part) for part in re.findall(literal, raw))
             check((context, source) in catalog, f"Missing Chinese translation in {path}: {source}")
 
+    svg = ET.parse(PROJECT / "assets/icons/openkeys.svg").getroot()
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    whites = svg.findall("svg:g[@id='white-keys']/svg:rect", namespace)
+    blacks = svg.findall("svg:g[@id='black-keys']/svg:rect", namespace)
+    check(len(whites) == 8 and len(blacks) == 5, "Icon must show eight white and five black keys")
+    for black, index in zip(blacks, (0, 1, 3, 4, 5)):
+        center = float(black.get("x")) + float(black.get("width")) / 2
+        boundary = (float(whites[index].get("x")) + float(whites[index].get("width"))
+                    + float(whites[index + 1].get("x"))) / 2
+        check(center == boundary, "Black keys must follow the C-to-C two-plus-three grouping")
+        check(0.58 <= float(black.get("height")) / float(whites[index].get("height")) <= 0.62,
+              "Black keys must be about 60% of the white-key length")
+
     sizes = {16, 24, 32, 48, 64, 128, 256}
     for size in sizes:
         with Image.open(PROJECT / f"assets/icons/openkeys-{size}.png") as icon:
             check(icon.size == (size, size) and icon.mode == "RGBA", f"Invalid {size}px icon")
-            check(icon.getpixel((0, 0))[3] == 0, f"Icon corner must be transparent: {size}px")
+            check(all(icon.getpixel(point)[3] == 0 for point in
+                      ((0, 0), (size - 1, 0), (0, size - 1), (size - 1, size - 1))),
+                  f"Icon corners must be transparent: {size}px")
+            # Even the smallest raster must retain five dark keys separated by light gaps.
+            centers = [float(key.get("x")) + float(key.get("width")) / 2 for key in blacks]
+            gaps = [float(whites[i].get("x")) + float(whites[i].get("width")) / 2
+                    for i in (1, 2, 4, 5)]
+            for positions, dark in ((centers, True), (gaps, False)):
+                for x in positions:
+                    brightness = sum(icon.getpixel((int(x * size / 256), int(80 * size / 256)))[:3]) / 3
+                    check((brightness < 128) == dark, f"Indistinct black-key grouping: {size}px")
     with Image.open(PROJECT / "assets/icons/openkeys.ico") as icon:
         check(icon.ico.sizes() == {(size, size) for size in sizes}, "ICO dimensions are incomplete")
+        for size in sizes:
+            with Image.open(PROJECT / f"assets/icons/openkeys-{size}.png") as png:
+                check(icon.ico.getimage((size, size)).convert("RGBA").tobytes() == png.tobytes(),
+                      f"ICO frame differs from PNG: {size}px")
     previews = []
     for name in ["preview.png", "preview.zh-CN.png"]:
         with Image.open(PROJECT / "docs" / name) as preview:
