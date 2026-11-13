@@ -9,6 +9,40 @@ $installer = (Resolve-Path $InstallerPath).Path
 $scripts = @(Get-ChildItem (Split-Path $installer) -Filter '*.nsi' -Recurse -File)
 if ($scripts.Count -ne 1) { throw 'Expected exactly one generated NSIS script.' }
 $script = Get-Content -LiteralPath $scripts[0].FullName -Raw -Encoding UTF8
+$expectedVersion = [regex]::Match($script, '(?m)^\s*!define VERSION "(\d+\.\d+\.\d+)"\s*$').Groups[1].Value
+if (-not $expectedVersion) { throw 'Generated installer has no valid product version.' }
+
+function Assert-ProductMetadata([string]$Path) {
+    $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($Path)
+    if ($info.CompanyName -ne 'OpenKeysPiano' -or $info.ProductName -ne 'OpenKeys Piano' -or
+        $info.FileVersion -ne $expectedVersion -or $info.ProductVersion -ne $expectedVersion -or
+        -not $info.FileDescription -or
+        "$($info.FileMajorPart).$($info.FileMinorPart).$($info.FileBuildPart).$($info.FilePrivatePart)" -ne "$expectedVersion.0" -or
+        "$($info.ProductMajorPart).$($info.ProductMinorPart).$($info.ProductBuildPart).$($info.ProductPrivatePart)" -ne "$expectedVersion.0") {
+        throw "Incorrect Windows publisher/product/version metadata: $Path"
+    }
+}
+
+Assert-ProductMetadata $installer
+# Read the actual portable payload as well as the installed application below.
+$zipPath = [System.IO.Path]::ChangeExtension($installer, '.zip')
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+$metadataRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('openkeys-metadata-' + [guid]::NewGuid().ToString('N'))
+try {
+    New-Item -ItemType Directory -Path $metadataRoot | Out-Null
+    foreach ($name in @('openkeys.exe', 'openkeys-soundfont-check.exe')) {
+        $entries = @($archive.Entries | Where-Object { $_.Name -eq $name })
+        if ($entries.Count -ne 1) { throw "Expected one $name in the portable ZIP." }
+        $extracted = Join-Path $metadataRoot $name
+        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entries[0], $extracted)
+        Assert-ProductMetadata $extracted
+    }
+} finally {
+    $archive.Dispose()
+    Remove-Item -LiteralPath $metadataRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 if ([regex]::Matches($script, '(?m)^\s*Page custom InstallOptionsPage SaveShortcutOptions').Count -ne 1 -or
     $script -match '!insertmacro MUI_PAGE_STARTMENU' -or
     [regex]::Matches($script, '!insertmacro MUI_LANGUAGE').Count -ne 2 -or
@@ -150,6 +184,19 @@ foreach ($language in @(
             }
             $executable = Join-Path $installRoot 'openkeys.exe'
             if (-not (Test-Path $executable -PathType Leaf)) { throw 'Installed application is missing.' }
+            foreach ($name in @('openkeys.exe', 'openkeys-soundfont-check.exe', 'Uninstall.exe')) {
+                Assert-ProductMetadata (Join-Path $installRoot $name)
+            }
+            $uninstallRecords = @(
+                @('Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+                  'Registry::HKEY_LOCAL_MACHINE\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall') |
+                    Where-Object { Test-Path $_ } | ForEach-Object { Get-ChildItem $_ } |
+                    Where-Object { $_.GetValue('UninstallString') -eq ('"' + $uninstaller + '"') }
+            )
+            if ($uninstallRecords.Count -ne 1 -or $uninstallRecords[0].GetValue('Publisher') -ne 'OpenKeysPiano' -or
+                $uninstallRecords[0].GetValue('DisplayVersion') -ne $expectedVersion) {
+                throw 'Installed publisher/version metadata is incorrect.'
+            }
             $payload = @(Get-ChildItem -LiteralPath $installRoot -Recurse -File | Select-Object -ExpandProperty FullName)
             if (-not ($payload | Where-Object { $_ -like '*.dll' }) -or
                 -not (Test-Path (Join-Path $installRoot 'docs')) -or
@@ -214,4 +261,4 @@ foreach ($language in @(
     }
 }
 Remove-Item -LiteralPath $outsideFile
-Write-Host 'Installer verified: both languages, recorded uninstall locale, Unicode/spaced path, defaults and all shortcut combinations, startup, locked-file failure and complete installation-directory removal.'
+Write-Host 'Installer verified: publisher/version metadata (installer, uninstaller, installed and portable programs), both languages, recorded uninstall locale, Unicode/spaced path, defaults and all shortcut combinations, startup, locked-file failure and complete installation-directory removal.'

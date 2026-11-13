@@ -459,10 +459,11 @@ void MainWindow::buildUi() {
             this, QCoreApplication::translate("OpenKeys", "About OpenKeys Piano"),
             QCoreApplication::translate(
                 "OpenKeys",
-                "OpenKeys Piano 0.1.0\nFree and open-source computer-keyboard piano · GPL-3.0-or-later\n\nQt "
+                "OpenKeys Piano %1\nFree and open-source computer-keyboard piano · GPL-3.0-or-later\n\nQt "
                 "6 · FluidSynth · PortAudio\nImport your own soundfont. None is bundled or "
                 "downloaded.\n\nReads known EOP v200/v201/v301 containers; unsupported controls are "
-                "reported.\nCtrl+Alt+F12: disable background playing and silence all notes."));
+                "reported.\nCtrl+Alt+F12: disable background playing and silence all notes.")
+                .arg(QCoreApplication::applicationVersion()));
     });
     connect(settings, &QPushButton::clicked, this, [this] { audioSettings(); });
     auto *status = new QHBoxLayout;

@@ -44,9 +44,11 @@ vcpkg 清单固定基线 `ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0`。依赖需�
 
 每次推送的 Windows CI 都会构建、部署、验证脱离开发 PATH 的启动，并生成安装器和便携 ZIP，位于 `OpenKeysPiano-Windows-installer` 工件。手动工作流选择 `build_installer=true` 也生成相同包；PR 运行构建和测试，不生成安装包。
 
-推送匹配 `v*` 的标签时，同一工作流先完成 Linux 和 Windows 验证，最后由 `release` 任务在两者都成功后发布。该任务下载已验证的 Windows 工件，检查安装器和便携 ZIP 与标签版本一致，生成 `SHA256SUMS.txt`，再创建 GitHub Release。只有发布任务拥有 `contents: write` 权限；分支、PR 和手动运行不会发布。Release 包含带版本号的 NSIS 安装器（例如 `OpenKeysPiano-0.1.0-Windows-AMD64.exe`）、对应便携 ZIP 和 `SHA256SUMS.txt`。0.1.0 的 Linux 仍仅支持源码构建。
+推送匹配 `v*` 的标签时，同一工作流先完成 Linux 和 Windows 验证，最后由 `release` 任务在两者都成功后发布。该任务下载已验证的 Windows 工件，检查安装器和便携 ZIP 与标签版本一致，生成 `SHA256SUMS.txt`，再创建 GitHub Release。只有发布任务拥有 `contents: write` 权限；分支、PR 和手动运行不会发布。Release 包含带版本号的 NSIS 安装器（例如 `OpenKeysPiano-0.1.1-Windows-AMD64.exe`）、对应便携 ZIP 和 `SHA256SUMS.txt`。0.1.1 的 Linux 仍仅支持源码构建。
 
 CI 在一次性 Windows 机器执行 `tools/verify_windows_installer.ps1`，覆盖两种安装语言、带空格的中文路径、默认与全部快捷方式选项、Unicode `IShellLinkW` 目标读取、脱离开发 PATH 的直接/快捷方式启动、升级、占用文件失败和卸载清理。不得在已有 OpenKeys 安装的工作站运行该脚本。交互界面和 DPI 检查仍需实机完成，见 [验证文档](validation.zh-CN.md)。
+
+应用版本、关于窗口、Windows 文件资源及安装包统一采用 CMake 项目版本。两个自有可执行文件、安装器和卸载器均包含产品与版本信息；已安装应用列表中的发行者为 `OpenKeysPiano`。这些字段不构成数字签名：v0.1.1 未签名，Windows 安全提示仍可能显示“未知发布者”或 SmartScreen 警告。CI 检查安装器、卸载器、已安装程序及便携 ZIP 内程序的文件资源，并验证注册表中的安装发行者和版本。
 
 ## 应用图标
 

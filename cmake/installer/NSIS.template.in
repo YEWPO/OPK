@@ -46,6 +46,14 @@
   BrandingText "$(OpenKeysBranding)"
   OutFile "@CPACK_TOPLEVEL_DIRECTORY@/@CPACK_OUTPUT_FILE_NAME@"
 
+  ;File properties for the installer and its generated uninstaller (not a signature).
+  VIProductVersion "@CPACK_PACKAGE_VERSION_MAJOR@.@CPACK_PACKAGE_VERSION_MINOR@.@CPACK_PACKAGE_VERSION_PATCH@.0"
+  VIAddVersionKey /LANG=1033 "ProductName" "OpenKeys Piano"
+  VIAddVersionKey /LANG=1033 "CompanyName" "@CPACK_PACKAGE_VENDOR@"
+  VIAddVersionKey /LANG=1033 "FileDescription" "OpenKeys Piano Setup"
+  VIAddVersionKey /LANG=1033 "FileVersion" "@CPACK_PACKAGE_VERSION@"
+  VIAddVersionKey /LANG=1033 "ProductVersion" "@CPACK_PACKAGE_VERSION@"
+
   ;Set compression
   SetCompressor @CPACK_NSIS_COMPRESSOR@
 

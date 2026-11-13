@@ -10,7 +10,7 @@
 
 ## 下载
 
-v0.1.0 已通过 [GitHub Releases](https://github.com/YEWPO/OPK/releases/tag/v0.1.0) 发布，提供 Windows x64 的 NSIS 安装器或便携 ZIP，并附 SHA-256 校验和。安装器未进行代码签名，Windows SmartScreen 可能要求确认。安装包不附带音源，请安装后自行导入 SF2。本版 Linux 仅支持源码构建，见 [构建文档](docs/build.zh-CN.md)。
+v0.1.1 已通过 [GitHub Releases](https://github.com/YEWPO/OPK/releases/tag/v0.1.1) 发布，提供 Windows x64 的 NSIS 安装器或便携 ZIP，并附 SHA-256 校验和。安装器和程序未进行代码签名。Windows 文件属性和已安装应用列表中的发行者为 OpenKeysPiano，但安全提示仍可能显示“未知发布者”或 SmartScreen 警告。安装包不附带音源，请安装后自行导入 SF2。本版 Linux 仅支持源码构建，见 [构建文档](docs/build.zh-CN.md)。
 
 ## 首次使用：导入音源
 

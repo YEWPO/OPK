@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QCoreApplication::setApplicationName("OpenKeysPiano");
     QCoreApplication::setOrganizationName("OpenKeys");
-    QCoreApplication::setApplicationVersion("0.1.0");
+    QCoreApplication::setApplicationVersion(OPENKEYS_VERSION);
     QCommandLineParser parser;
     parser.setApplicationDescription("OpenKeys Piano — offline computer-keyboard piano");
     parser.addHelpOption();

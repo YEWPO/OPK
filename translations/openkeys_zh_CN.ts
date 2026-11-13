@@ -830,7 +830,7 @@ The displayed latency is reported by the driver, not measured key-to-sound laten
     </message>
     <message>
         <location filename="../src/ui/main_window.cpp" line="445"/>
-        <source>OpenKeys Piano 0.1.0
+        <source>OpenKeys Piano %1
 Free and open-source computer-keyboard piano · GPL-3.0-or-later
 
 Qt 6 · FluidSynth · PortAudio
@@ -838,7 +838,7 @@ Import your own soundfont. None is bundled or downloaded.
 
 Reads known EOP v200/v201/v301 containers; unsupported controls are reported.
 Ctrl+Alt+F12: disable background playing and silence all notes.</source>
-        <translation>OpenKeys Piano 0.1.0
+        <translation>OpenKeys Piano %1
 免费开源的电脑键盘钢琴 · GPL-3.0-or-later
 
 Qt 6 · FluidSynth · PortAudio
