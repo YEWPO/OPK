@@ -1,4 +1,5 @@
 #include "audio/engine.h"
+#include <QCoreApplication>
 #include <fluidsynth.h>
 #include <portaudio.h>
 #ifdef _WIN32
@@ -268,22 +269,25 @@ SoundfontLoad AudioEngine::loadSoundfont(const QString &path, double sampleRate)
         fluid_audio_driver_register(enabled);
     });
     if (!std::isfinite(sampleRate) || sampleRate < 8000 || sampleRate > 96000)
-        return {{}, QStringLiteral("不支持的采样率")};
+        return {{}, QCoreApplication::translate("OpenKeys", "Unsupported sample rate")};
     auto font = std::make_shared<Soundfont>();
     font->sampleRate = sampleRate;
     font->settings = new_fluid_settings();
     if (!font->settings)
-        return {{}, QStringLiteral("无法分配音源设置")};
+        return {{}, QCoreApplication::translate("OpenKeys", "Could not allocate soundfont settings")};
     fluid_settings_setnum(font->settings, "synth.sample-rate", sampleRate);
     fluid_settings_setnum(font->settings, "synth.gain", .5);
     fluid_settings_setint(font->settings, "synth.polyphony", 256);
     fluid_settings_setint(font->settings, "synth.threadsafe-api", 0); // callback is sole owner while running
     font->synth = new_fluid_synth(font->settings);
     if (!font->synth)
-        return {{}, QStringLiteral("无法初始化采样引擎")};
+        return {{}, QCoreApplication::translate("OpenKeys", "Could not initialize the sampler")};
     const int id = fluid_synth_sfload(font->synth, path.toUtf8().constData(), 0);
     if (id < 0)
-        return {{}, QStringLiteral("无法载入 SF2 音源，请检查文件是否完整：%1").arg(path)};
+        return {{},
+                QCoreApplication::translate(
+                    "OpenKeys", "Could not load the SF2 soundfont. Check that the file is complete: %1")
+                    .arg(path)};
     fluid_preset_t *preset = nullptr;
     auto *sf = fluid_synth_get_sfont_by_id(font->synth, id);
     if (sf) {
@@ -291,7 +295,7 @@ SoundfontLoad AudioEngine::loadSoundfont(const QString &path, double sampleRate)
         preset = fluid_sfont_iteration_next(sf);
     }
     if (!preset)
-        return {{}, QStringLiteral("该音源没有可播放的预设")};
+        return {{}, QCoreApplication::translate("OpenKeys", "This soundfont has no playable presets")};
     const int bank = fluid_preset_get_banknum(preset), program = fluid_preset_get_num(preset);
     for (int c = 0; c < 6; ++c)
         fluid_synth_program_select(font->synth, c, id, bank, program);
@@ -343,7 +347,8 @@ QString AudioEngine::start(const AudioConfig &config) {
     p_->config = config;
     const auto available = devices();
     if (available.empty())
-        return QStringLiteral("没有可用的立体声音频设备。%1").arg(p_->initError);
+        return QCoreApplication::translate("OpenKeys", "No stereo audio device is available. %1")
+            .arg(p_->initError);
     int id = config.device;
     if (id == -1) {
         id = Pa_GetDefaultOutputDevice();
@@ -351,11 +356,13 @@ QString AudioEngine::start(const AudioConfig &config) {
             id = available.front().id;
     }
     if (std::none_of(available.begin(), available.end(), [id](const auto &d) { return d.id == id; }))
-        return QStringLiteral("所选设备已不可用，请重新选择");
+        return QCoreApplication::translate(
+            "OpenKeys", "The selected device is no longer available. Please choose another device.");
     const auto *info = Pa_GetDeviceInfo(id);
     p_->rate = std::clamp(info->defaultSampleRate, 8000., 96000.);
     if (p_->font && std::abs(p_->font->sampleRate - p_->rate) > .5)
-        return QStringLiteral("设备采样率已变化，需要重新载入音源");
+        return QCoreApplication::translate("OpenKeys",
+                                           "The device sample rate changed; the soundfont must be reloaded.");
     PaStreamParameters output{};
     output.device = id;
     output.channelCount = 2;
@@ -371,7 +378,7 @@ QString AudioEngine::start(const AudioConfig &config) {
     output.hostApiSpecificStreamInfo = &wasapi;
 #else
     if (config.exclusive)
-        notice = QStringLiteral("此平台使用系统音频模式。 ");
+        notice = QCoreApplication::translate("OpenKeys", "This platform uses system audio mode. ");
 #endif
     auto open = [&]() {
         return Pa_OpenStream(&p_->stream, nullptr, &output, p_->rate,
@@ -385,12 +392,15 @@ QString AudioEngine::start(const AudioConfig &config) {
         wasapi.flags = 0;
         p_->stream = nullptr;
         err = open();
-        notice = QStringLiteral("独占模式不可用（%1），已退回共享模式。 ").arg(reason);
+        notice =
+            QCoreApplication::translate("OpenKeys", "Exclusive mode is unavailable (%1); using shared mode. ")
+                .arg(reason);
     }
 #endif
     if (err != paNoError) {
         p_->stream = nullptr;
-        return QStringLiteral("无法打开音频设备：%1").arg(QString::fromUtf8(Pa_GetErrorText(err)));
+        return QCoreApplication::translate("OpenKeys", "Could not open the audio device: %1")
+            .arg(QString::fromUtf8(Pa_GetErrorText(err)));
     }
     const auto *streamInfo = Pa_GetStreamInfo(p_->stream);
     if (streamInfo)
@@ -398,7 +408,8 @@ QString AudioEngine::start(const AudioConfig &config) {
     err = Pa_StartStream(p_->stream);
     if (err != paNoError) {
         shutdown();
-        return QStringLiteral("无法启动音频设备：%1").arg(QString::fromUtf8(Pa_GetErrorText(err)));
+        return QCoreApplication::translate("OpenKeys", "Could not start the audio device: %1")
+            .arg(QString::fromUtf8(Pa_GetErrorText(err)));
     }
     return notice;
 }

@@ -1,3 +1,4 @@
+#include "core/language.h"
 #include "fixtures.h"
 #include "platform/input.h"
 #include "ui/keyboard_view.h"
@@ -17,6 +18,8 @@
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QScopeGuard>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStandardPaths>
@@ -65,7 +68,63 @@ KeyboardView *keyboardView(MainWindow &window) {
 } // namespace
 class UiTests : public QObject {
     Q_OBJECT
+    Language language_;
   private slots:
+    void init() {
+        QVERIFY(language_.load("zh_CN"));
+    }
+    void smallWindowLayout() {
+        QVERIFY(language_.load("en"));
+        MainWindow window(true);
+        window.resize(980, 760);
+        window.show();
+        QCoreApplication::processEvents();
+        auto *scroll = window.findChild<QScrollArea *>();
+        QVERIFY(scroll);
+        QVERIFY(scroll->verticalScrollBar()->maximum() > 0);
+        auto *view = keyboardView(window);
+        QVERIFY(view->height() >= view->minimumSizeHint().height());
+        QVERIFY(scroll->widget()->height() > view->geometry().bottom());
+    }
+    void englishInterface() {
+        QVERIFY(language_.load("en"));
+        MainWindow window(true);
+        QCOMPARE(window.findChild<QLabel *>("soundfontStatus")->text(),
+                 "○ Import a soundfont to start playing");
+        QCOMPARE(window.findChild<QPushButton *>("demoSong")->text(), "Demo");
+        QCOMPARE(window.findChild<QSpinBox *>("leftOctave")->text(), "Original");
+        auto *language = window.findChild<QComboBox *>("languageChoice");
+        QVERIFY(language);
+        QSettings settings("OpenKeys", "Piano");
+        const auto before = settings.value("ui/language");
+        const auto restore = qScopeGuard([&] {
+            if (before.isValid())
+                settings.setValue("ui/language", before);
+            else
+                settings.remove("ui/language");
+        });
+        language->setCurrentIndex(language->findData("zh_CN"));
+        QVERIFY(QMetaObject::invokeMethod(language, "activated", Q_ARG(int, language->currentIndex())));
+        QCOMPARE(settings.value("ui/language").toString(), "zh_CN");
+        QCOMPARE(window.findChild<QPushButton *>("demoSong")->text(), "Demo");
+        QVERIFY(window.statusBar()->currentMessage().contains("Restart"));
+        bool guideChecked = false;
+        QTimer::singleShot(0, &window, [&] {
+            auto *dialog = window.findChild<QDialog *>("soundfontGuideDialog");
+            QVERIFY(dialog);
+            auto *browser = dialog->findChild<QTextBrowser *>("soundfontGuideContent");
+            QVERIFY(browser->toPlainText().contains("Soundfont Import Guide"));
+            QVERIFY(
+                QMetaObject::invokeMethod(browser, "anchorClicked", Q_ARG(QUrl, QUrl("soundfont.zh-CN.md"))));
+            QVERIFY(browser->toPlainText().contains(QStringLiteral("音源导入教程")));
+            QVERIFY(QMetaObject::invokeMethod(browser, "anchorClicked", Q_ARG(QUrl, QUrl("soundfont.md"))));
+            QVERIFY(browser->toPlainText().contains("Soundfont Import Guide"));
+            guideChecked = true;
+            dialog->accept();
+        });
+        window.findChild<QPushButton *>("soundfontGuide")->click();
+        QVERIFY(guideChecked);
+    }
     void startupDefaults() {
         const auto directory = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
         QVERIFY(QDir().mkpath(directory));

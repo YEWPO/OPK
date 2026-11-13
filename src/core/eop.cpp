@@ -1,4 +1,5 @@
 #include "core/model.h"
+#include <QCoreApplication>
 #include <QStringDecoder>
 #include <QtEndian>
 #include <algorithm>
@@ -17,7 +18,8 @@ struct Reader {
     QByteArray data;
     void range(qsizetype p, qsizetype n) const {
         if (p < 0 || n < 0 || p > data.size() || n > data.size() - p)
-            throw FileError("corrupt_eop", "Truncated EOP container");
+            throw FileError("corrupt_eop",
+                            QCoreApplication::translate("OpenKeys", "Truncated EOP container"));
     }
     uint8_t u8(qsizetype p) const {
         range(p, 1);
@@ -58,7 +60,8 @@ void merge(Map &to, const Map &from) {
         target.control = target.control || map.control;
         if (map.transposeDelta) {
             if (target.transposeDelta && target.transposeDelta != map.transposeDelta)
-                throw FileError("unsupported_layout", "Conflicting transpose actions");
+                throw FileError("unsupported_layout",
+                                QCoreApplication::translate("OpenKeys", "Conflicting transpose actions"));
             target.transposeDelta = map.transposeDelta;
         }
     }
@@ -66,7 +69,8 @@ void merge(Map &to, const Map &from) {
 Map section(const Reader &r, qsizetype begin, qsizetype length, int stride) {
     r.range(begin, length);
     if (length < 28 || (length - 28) % stride || (length - 28) / stride > 256)
-        throw FileError("unsupported_layout", "Invalid mapping section size");
+        throw FileError("unsupported_layout",
+                        QCoreApplication::translate("OpenKeys", "Invalid mapping section size"));
     // Compatibility assumption: the first signed header word selects a pitch
     // class via its negative, normalized upward within one octave. See docs.
     const auto offset = std::bit_cast<int32_t>(r.u32(begin));
@@ -75,15 +79,19 @@ Map section(const Reader &r, qsizetype begin, qsizetype length, int stride) {
     for (qsizetype p = begin + 28; p < begin + length; p += stride) {
         const auto key = r.u8(p + 4);
         if (result.contains(key))
-            throw FileError("unsupported_layout", "Duplicate key in mapping section");
+            throw FileError("unsupported_layout",
+                            QCoreApplication::translate("OpenKeys", "Duplicate key in mapping section"));
         Mapping map;
         if (r.u16(p + 32) == 0x90) {
             const auto note = r.u16(p + 34);
             if (note > 127)
-                throw FileError("corrupt_eop", "Invalid mapped pitch");
+                throw FileError("corrupt_eop",
+                                QCoreApplication::translate("OpenKeys", "Invalid mapped pitch"));
             const int pitch = int(note) + shift;
             if (pitch < 0 || pitch > 127)
-                throw FileError("corrupt_eop", "EOP mapping offset produces an out-of-range pitch");
+                throw FileError("corrupt_eop",
+                                QCoreApplication::translate(
+                                    "OpenKeys", "EOP mapping offset produces an out-of-range pitch"));
             map.notes.insert(uint8_t(pitch));
         } else {
             map.control = true;
@@ -102,16 +110,19 @@ Map prefixed(const Reader &r, qsizetype begin, qsizetype end, int stride) {
     int layers = 0;
     while (begin < end) {
         if (++layers > 32 || end - begin < 4)
-            throw FileError("unsupported_layout", "Invalid mapping layers");
+            throw FileError("unsupported_layout",
+                            QCoreApplication::translate("OpenKeys", "Invalid mapping layers"));
         const qsizetype length = r.u32(begin);
         begin += 4;
         if (length > end - begin)
-            throw FileError("unsupported_layout", "Mapping exceeds its container");
+            throw FileError("unsupported_layout",
+                            QCoreApplication::translate("OpenKeys", "Mapping exceeds its container"));
         merge(result, section(r, begin, length, stride));
         begin += length;
     }
     if (!layers)
-        throw FileError("unsupported_layout", "Empty mapping container");
+        throw FileError("unsupported_layout",
+                        QCoreApplication::translate("OpenKeys", "Empty mapping container"));
     return result;
 }
 QString metadata(const Reader &r, qsizetype start) {
@@ -129,7 +140,7 @@ QString metadata(const Reader &r, qsizetype start) {
 } // namespace
 Song parseEop(const QByteArray &raw) {
     if (raw.size() < Header + 4 || raw.size() > MaxFileBytes)
-        throw FileError("invalid_eop", "Invalid EOP file size");
+        throw FileError("invalid_eop", QCoreApplication::translate("OpenKeys", "Invalid EOP file size"));
     Reader r{raw};
     for (qsizetype i = 0; i < r.data.size(); ++i) {
         const auto n = int(i % 32);
@@ -137,7 +148,8 @@ Song parseEop(const QByteArray &raw) {
         r.data[i] = char(uint8_t(raw[i]) ^ mask);
     }
     if (r.data.first(13) != "EveryonePiano")
-        throw FileError("invalid_eop", "Signature is not EveryonePiano");
+        throw FileError("invalid_eop",
+                        QCoreApplication::translate("OpenKeys", "Signature is not EveryonePiano"));
     const auto version = r.u32(0x10);
     if (version != 200 && version != 201 && version != 301)
         throw FileError("unsupported_version", QString::number(version));
@@ -151,23 +163,26 @@ Song parseEop(const QByteArray &raw) {
             r.data.chop(1);
         const auto blocks = r.u32(0x20);
         if (blocks < 1 || blocks > 4)
-            throw FileError("unsupported_layout", "Invalid v200 block count");
+            throw FileError("unsupported_layout",
+                            QCoreApplication::translate("OpenKeys", "Invalid v200 block count"));
         const qsizetype base = Header + (blocks - 1) * 0x184;
         eventStart = base + 28 + 255 * 12 + 28;
         r.range(base, eventStart - base);
         const auto left = r.u32(base + 12), right = r.u32(base + 16);
         if (left > 100 || right > 100)
-            throw FileError("corrupt_eop", "Invalid v200 dynamics");
+            throw FileError("corrupt_eop", QCoreApplication::translate("OpenKeys", "Invalid v200 dynamics"));
         for (int key = 1; key <= 255; ++key) {
             const qsizetype p = base + 28 + (key - 1) * 12;
             if (r.u32(p) != uint32_t(key))
-                throw FileError("unsupported_layout", "Invalid v200 mapping order");
+                throw FileError("unsupported_layout",
+                                QCoreApplication::translate("OpenKeys", "Invalid v200 mapping order"));
             Mapping m;
             const auto action = r.u32(p + 4);
             if (action == 1 || action == 0x10001) {
                 const auto note = r.u32(p + 8);
                 if (note > 127)
-                    throw FileError("corrupt_eop", "Invalid v200 pitch");
+                    throw FileError("corrupt_eop",
+                                    QCoreApplication::translate("OpenKeys", "Invalid v200 pitch"));
                 m.notes.insert(uint8_t(note));
                 m.hand = action == 1 ? Hand::Right : Hand::Left;
                 m.velocity = int(((action == 1 ? right : left) * 127 + 50) / 100);
@@ -176,11 +191,13 @@ Song parseEop(const QByteArray &raw) {
             mappings.emplace(uint8_t(key), std::move(m));
         }
         if ((r.data.size() - eventStart) % 16 || r.data.size() - eventStart < 16)
-            throw FileError("unsupported_layout", "Invalid v200 event pool");
+            throw FileError("unsupported_layout",
+                            QCoreApplication::translate("OpenKeys", "Invalid v200 event pool"));
         while (eventStart + count * 16 < r.data.size() && r.u8(eventStart + count * 16 + 8) != 0)
             ++count;
         if (eventStart + count * 16 == r.data.size() || !r.zero(eventStart + count * 16 + 8, r.data.size()))
-            throw FileError("corrupt_eop", "Missing v200 terminator or invalid padding");
+            throw FileError("corrupt_eop", QCoreApplication::translate(
+                                               "OpenKeys", "Missing v200 terminator or invalid padding"));
     } else {
         const int stride = version == 201 ? 42 : 52;
         const auto first = r.u32(Header);
@@ -194,11 +211,13 @@ Song parseEop(const QByteArray &raw) {
         } else if (version == 201) {
             const qsizetype mapSize = r.u32(0x28), eventSize = r.u32(0x2c);
             if (mapSize < 4 || eventSize < 16 || eventSize % 16 || eventSize > r.data.size())
-                throw FileError("unsupported_layout", "Invalid zero-section lengths");
+                throw FileError("unsupported_layout",
+                                QCoreApplication::translate("OpenKeys", "Invalid zero-section lengths"));
             eventStart = r.data.size() - eventSize;
             const qsizetype start = eventStart - (mapSize - 4);
             if (start < Header + 4)
-                throw FileError("unsupported_layout", "Invalid zero-section placement");
+                throw FileError("unsupported_layout",
+                                QCoreApplication::translate("OpenKeys", "Invalid zero-section placement"));
             int candidates = 0;
             for (qsizetype length = 28; length <= eventStart - start && length <= 28 + 256 * 42;
                  length += 42) {
@@ -212,15 +231,20 @@ Song parseEop(const QByteArray &raw) {
                 }
             }
             if (candidates != 1)
-                throw FileError("unsupported_layout", "Ambiguous or unknown zero-section mapping");
+                throw FileError(
+                    "unsupported_layout",
+                    QCoreApplication::translate("OpenKeys", "Ambiguous or unknown zero-section mapping"));
         } else
-            throw FileError("unsupported_layout", "Unknown v301 container variant");
+            throw FileError("unsupported_layout",
+                            QCoreApplication::translate("OpenKeys", "Unknown v301 container variant"));
         if (eventStart > r.data.size() - 16 || (r.data.size() - eventStart - 16) % 16)
-            throw FileError("unsupported_layout", "Invalid event container length");
+            throw FileError("unsupported_layout",
+                            QCoreApplication::translate("OpenKeys", "Invalid event container length"));
         count = (r.data.size() - eventStart - 16) / 16; // verified container has one trailing record
     }
     if (count > qsizetype(MaxEvents))
-        throw FileError("too_many_events", "EOP event limit exceeded");
+        throw FileError("too_many_events",
+                        QCoreApplication::translate("OpenKeys", "EOP event limit exceeded"));
     if (version != 200) {
         PerformanceConfig config;
         const qsizetype header = Header + 4;
@@ -247,15 +271,17 @@ Song parseEop(const QByteArray &raw) {
         const qsizetype p = eventStart + i * 16;
         const double ms = r.real(p);
         if (!std::isfinite(ms) || ms < 0 || ms < previous || ms > double(MaxSongUs) / 1000)
-            throw FileError("corrupt_eop", "Invalid or decreasing timestamp");
+            throw FileError("corrupt_eop",
+                            QCoreApplication::translate("OpenKeys", "Invalid or decreasing timestamp"));
         previous = ms;
         const auto status = r.u8(p + 8), key = r.u8(p + 9), velocity = r.u8(p + 10);
         if ((status != 0x80 && status != 0x90) || velocity > 127 || !r.zero(p + 11, p + 16))
-            throw FileError("corrupt_eop", "Invalid event record");
+            throw FileError("corrupt_eop", QCoreApplication::translate("OpenKeys", "Invalid event record"));
         const auto found = mappings.find(key);
         if (found == mappings.end())
             throw FileError("unsupported_layout",
-                            QString("Unmapped scan code 0x%1").arg(key, 2, 16, QChar('0')));
+                            QCoreApplication::translate("OpenKeys", "Unmapped scan code 0x%1")
+                                .arg(key, 2, 16, QChar('0')));
         const auto &m = found->second;
         if (m.control && m.transposeDelta && !song.configurations.empty()) {
             if (status == 0x90) {
@@ -270,7 +296,8 @@ Song parseEop(const QByteArray &raw) {
         if (status == 0x80 && !m.notes.empty()) {
             auto &held = active[key];
             if (held.empty())
-                throw FileError("corrupt_eop", "Unmatched key release");
+                throw FileError("corrupt_eop",
+                                QCoreApplication::translate("OpenKeys", "Unmatched key release"));
             for (auto e : held.front()) {
                 e.timeUs = int64_t(std::llround(ms * 1000));
                 e.kind = Kind::NoteOff;
@@ -290,7 +317,8 @@ Song parseEop(const QByteArray &raw) {
             e.key = key >= 128 ? uint16_t((key & 0x7f) | 0x100) : key;
             const int shifted = int(pitch) + transposeDelta;
             if (shifted < 0 || shifted > 127)
-                throw FileError("corrupt_eop", "Transpose produces an out-of-range pitch");
+                throw FileError("corrupt_eop", QCoreApplication::translate(
+                                                   "OpenKeys", "Transpose produces an out-of-range pitch"));
             e.note = uint8_t(shifted);
             e.hand = m.hand;
             e.velocity = uint8_t(e.kind == Kind::NoteOn && m.velocity >= 0 ? m.velocity : velocity);
@@ -299,15 +327,17 @@ Song parseEop(const QByteArray &raw) {
             song.events.push_back(e);
             pressed.push_back(e);
             if (song.events.size() > MaxEvents)
-                throw FileError("too_many_events", "Expanded EOP event limit exceeded");
+                throw FileError("too_many_events",
+                                QCoreApplication::translate("OpenKeys", "Expanded EOP event limit exceeded"));
         }
         if (status == 0x90 && !m.notes.empty())
             active[key].push_back(std::move(pressed));
     }
     validateSong(song);
     if (controlWarning)
-        song.warnings.append(
-            QStringLiteral("文件包含尚未解释的控制键事件；这些事件未执行，延音或其他效果可能与原软件不同。"));
+        song.warnings.append(QCoreApplication::translate(
+            "OpenKeys", "This file contains unsupported control events. They were skipped; sustain or other "
+                        "effects may differ from the original performance."));
     return song;
 }
 } // namespace piano

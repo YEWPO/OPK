@@ -2,6 +2,7 @@
 #include "core/keyboard.h"
 #include <QAbstractSpinBox>
 #include <QApplication>
+#include <QCoreApplication>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QPlainTextEdit>
@@ -20,11 +21,13 @@ InputRouter::InputRouter(QWidget *window) : QObject(window), window_(window) {
     RAWINPUTDEVICE device{0x01, 0x06, RIDEV_DEVNOTIFY, hwnd};
     raw_ = RegisterRawInputDevices(&device, 1, sizeof(device));
     if (!raw_)
-        error_ = QStringLiteral("原始键盘输入注册失败，使用窗口内兼容输入");
+        error_ =
+            QCoreApplication::translate("OpenKeys", "Raw keyboard registration failed; using window input.");
     else if (!hotkey_)
-        error_ = QStringLiteral("Ctrl+Alt+F12 已被占用，后台演奏不可用");
+        error_ = QCoreApplication::translate(
+            "OpenKeys", "Ctrl+Alt+F12 is already in use; background playing is unavailable.");
 #else
-    error_ = QStringLiteral("后台演奏仅在 Windows 版本提供");
+    error_ = QCoreApplication::translate("OpenKeys", "Background playing is available on Windows only.");
 #endif
 }
 InputRouter::~InputRouter() {
@@ -50,7 +53,7 @@ bool InputRouter::setBackground(bool enabled) {
     RAWINPUTDEVICE device{0x01, 0x06, DWORD(RIDEV_DEVNOTIFY | (enabled ? RIDEV_INPUTSINK : 0)),
                           reinterpret_cast<HWND>(window_->winId())};
     if (!RegisterRawInputDevices(&device, 1, sizeof(device))) {
-        error_ = QStringLiteral("后台键盘注册失败");
+        error_ = QCoreApplication::translate("OpenKeys", "Background keyboard registration failed.");
         return false;
     }
     raw_ = true;

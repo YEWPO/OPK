@@ -1,4 +1,5 @@
 #include "core/keyboard.h"
+#include "core/language.h"
 #include "core/model.h"
 #include "fixtures.h"
 #include <QDir>
@@ -14,7 +15,11 @@
 using namespace piano;
 class CoreTests : public QObject {
     Q_OBJECT
+    Language language_;
   private slots:
+    void initTestCase() {
+        QVERIFY(language_.load("zh_CN"));
+    }
     void physicalKeyboardLayout() {
         const auto &keys = physicalKeys();
         std::set<uint16_t> codes;

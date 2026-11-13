@@ -1,63 +1,65 @@
-# 音源导入教程
+# Soundfont Import Guide
 
-OpenKeys Piano 不附带音源，也不会自动下载。首次使用时，请准备一个 **SF2 音源文件**，然后点击主界面的 **导入音源**。音源决定钢琴的音色；没有音源时仍可编辑键位、打开演奏文件，但暂时不能发声或录制。
+[简体中文](soundfont.zh-CN.md)
 
-## 1. 获取音源
+OpenKeys Piano does not bundle or automatically download soundfonts. Before playing, prepare an **SF2 soundfont file** and choose **Import Soundfont**. A soundfont supplies the instrument's sound. Without one, you can edit key mappings and open performance files, but cannot produce audio or record yet.
 
-已有钢琴音源时，可以直接使用扩展名为 `.sf2` 的文件。没有音源时，可在 [FreePats 官方钢琴音源页面](https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html) 自行选择：
+## 1. Obtain a soundfont
 
-| 音源 | 适合的情况 | 下载时注意 |
+If you already have a piano soundfont, use its `.sf2` file. Otherwise, choose a soundfont yourself from the [official FreePats piano page](https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html):
+
+| Soundfont | Suitable for | What to download |
 | --- | --- | --- |
-| Upright Piano KW | 想先快速开始，下载和内存占用较小 | 选择 SF2 行的 Sound bank；标准版压缩包约 27 MiB |
-| Salamander Grand Piano | 更重视音色和力度层次，接受更大的文件 | 选择 SF2 行的 Sound bank；压缩包约 296 MiB |
+| Upright Piano KW | A smaller download and lower memory use to get started | The SF2 row's Sound bank; the standard archive is approximately 27 MiB |
+| Salamander Grand Piano | More detailed tone and velocity layers with larger files | The SF2 row's Sound bank; the archive is approximately 296 MiB |
 
-该页面同时提供 SFZ 等格式，请务必选择 **SF2**。点击上述链接会打开你的浏览器；本软件不会代为下载或分发音源。音源的作者与许可说明以提供方页面及压缩包内说明为准。
+The page also offers formats such as SFZ. Select **SF2**. Links open your browser; OpenKeys does not download or distribute these banks. Consult the provider's page and archive for authorship and licensing. Download sizes and available versions may change.
 
-## 2. 解压下载文件
+## 2. Extract the download
 
-如果下载到的是 `.zip`、`.tar.xz` 或其他压缩包，请先用系统解压工具或支持该格式的解压软件完整解压，再找到其中的 `.sf2` 文件。
+If the download is a `.zip`, `.tar.xz` or another archive, extract it completely with a suitable archive tool, then locate the `.sf2` file.
 
-不要直接选择压缩包、`.sfz` 文件或 VST 插件的 `.dll` / `.vst3` 文件。把文件改名为 `.sf2` 不会改变它的实际格式。
+Do not select the archive, an `.sfz` file or a VST plugin's `.dll` / `.vst3`. Renaming a file to `.sf2` does not change its format.
 
-## 3. 在软件中导入
+## 3. Import in OpenKeys Piano
 
-1. 点击主界面的 **导入音源**。
-2. 选择解压后的 `.sf2` 文件，确认打开。
-3. 等待“正在复制音源”和“正在加载音源”完成。大音源需要更长时间，界面会显示进度。
-4. 主界面显示音源名称后，按电脑琴键试弹；也可以点击 **演奏示例**，再点击 **播放** 试听。
+1. Choose **Import Soundfont**.
+2. Select the extracted `.sf2` file and confirm.
+3. Wait for copying and loading to finish. Large banks take longer; the application displays progress.
+4. Once the soundfont name appears, play with your computer keyboard, or choose **Demo**, then **Play**.
 
-导入时，软件会在应用数据目录保存一份副本。**确认导入成功后，可以删除或移动原来的下载文件**；下次启动会自动加载已保存的副本，无需重复导入。
+The application saves a copy in its data directory. **After a successful import, you may remove or move the original download.** The managed copy loads automatically next time.
 
-复制和加载可能需要较多磁盘空间与内存。更换音源时，新旧副本会暂时同时存在，请预留足够空间。
+Copying and loading can require substantial disk space and memory. During replacement, old and new copies temporarily coexist; leave enough free space.
 
-## 4. 更换音源
+## 4. Replace a soundfont
 
-再次点击 **导入音源**，选择另一份 SF2 文件。软件只保留一个当前音源：新音源成功加载后，才会替换配置并清理上一个应用副本。原来的下载文件不受影响。
+Choose **Import Soundfont** again and select another SF2. Only one current bank is kept: after the new bank loads successfully, settings are updated and the previous managed copy is removed. Original downloads are untouched.
 
-如果新文件损坏、无法读取或磁盘空间不足，会显示原因，原来的音源和配置继续保留。此前版本保存的外部音源位置需要重新导入一次，以便应用保存副本。
+If the new file is damaged or unreadable, or storage is full, an error explains the problem and the previous soundfont and settings are preserved. External soundfont paths saved by older versions require one explicit import to create a managed copy.
 
-## 常见问题
+## Troubleshooting
 
-**文件选择窗口里看不到下载的文件？**
+**The downloaded file is missing from the file picker.**
 
-先确认已完成解压，并选择 `.sf2` 文件。SFZ、SF3 和 VST 插件不是当前导入功能支持的格式。
+Extract it first and select an `.sf2` file. The importer does not support SFZ, SF3 or VST plugins.
 
-**提示文件不是完整的 SF2，或加载失败？**
+**The application reports an incomplete SF2 or cannot load it.**
 
-确认下载已完成、压缩包已完整解压，尝试重新下载；也可以换用较小的钢琴 SF2。大音源加载失败时，请检查剩余内存和磁盘空间。
+Check that the download and extraction finished. Download again or try a smaller piano SF2. Check available memory and disk space for large banks.
 
-**导入后没有声音？**
+**There is no sound after importing.**
 
-确认主界面已经显示音源名称，主音量不为零，系统未静音，并在 **音频设置** 中选择正确的输出设备。点击键盘区域使其获得焦点后再试弹。若设备已断开，可重新进入音频设置连接。
+Check that the bank name is displayed, master volume is above zero and the system is not muted. Choose the correct output device in **Audio Settings**, then click the keyboard area to focus it. Reopen Audio Settings to reconnect a disconnected device.
 
-**出现爆音、卡顿或明显延迟？**
+**There are clicks, dropouts or noticeable latency.**
 
-先试用较小的音源。在 **音频设置** 中适当增大缓冲可以缓解爆音；减小缓冲可能降低延迟，但对设备性能要求更高。
+Try a smaller bank. Increase the buffer in **Audio Settings** to reduce dropouts; decreasing it may reduce latency but requires better device performance.
 
-**导入后不是钢琴音色？**
+**The bank does not sound like a piano.**
 
-当前版本使用文件中的第一个音色预设。请优先选择钢琴专用 SF2。
+The current version uses the first preset in the file. Prefer a piano-only SF2.
 
-**之前已导入，现在却提示重新导入？**
+**The application asks to import a previously imported bank again.**
 
-应用数据目录中的副本可能被清理或损坏。重新选择 SF2 即可；旧版记录的原文件路径也需要重新导入一次。
+The managed copy may have been removed or damaged. Select an SF2 again. External paths recorded by older versions also need one explicit import.

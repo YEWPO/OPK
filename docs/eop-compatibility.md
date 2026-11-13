@@ -1,5 +1,7 @@
 # EOP compatibility
 
+[简体中文](eop-compatibility.zh-CN.md)
+
 The C++ reader is an independent implementation informed by the [eop2midi specification](https://github.com/emizuki/eop2midi/blob/main/specification.md). No Go source is included or invoked. Reference documentation describes a repeating XOR-obfuscated binary container with recorded physical keys and absolute millisecond timestamps, rather than standard MIDI pitches stored directly in each event.
 
 | Layout | Implemented support |
@@ -30,6 +32,8 @@ During playback and pause, the existing performance controls show the file confi
 Other non-note control events are not interpreted as notes. They are skipped with a visible warning because their semantics have not been verified. This can affect sustain or other original performance controls. An event referring to an absent key mapping is rejected rather than guessed. Positive note-on velocity is required; no attempt is made to infer a nonzero velocity from an undocumented zero value.
 
 v200 has documented left/right actions. v201/v301 hand assignments are retained as Unknown, not inferred from the user's live keyboard or current note range. Metadata is decoded as UTF-8, then GB18030 where supported. Metadata decoding does not change pitch/timing interpretation.
+
+Interface language changes display text only, preserving file formats, error codes, configuration fields and user metadata.
 
 First release reads EOP only. Native recordings use versioned `.eopiano.json`; EOP export, EOPM, MusicXML, sheet-music engraving and screenshot/PDF interpretation are outside this importer.
 

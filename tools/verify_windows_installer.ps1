@@ -11,10 +11,14 @@ if ($scripts.Count -ne 1) { throw 'Expected exactly one generated NSIS script.' 
 $script = Get-Content -LiteralPath $scripts[0].FullName -Raw -Encoding UTF8
 if ([regex]::Matches($script, '(?m)^\s*Page custom InstallOptionsPage SaveShortcutOptions').Count -ne 1 -or
     $script -match '!insertmacro MUI_PAGE_STARTMENU' -or
-    [regex]::Matches($script, '!insertmacro MUI_LANGUAGE').Count -ne 1 -or
+    [regex]::Matches($script, '!insertmacro MUI_LANGUAGE').Count -ne 2 -or
     $script -notmatch '!insertmacro MUI_LANGUAGE "SimpChinese"' -or
+    $script -notmatch '!insertmacro MUI_LANGUAGE "English"' -or
+    $script -notmatch 'LangString OpenKeysDesktopShortcut \$\{LANG_ENGLISH\}' -or
+    $script -notmatch 'LangString OpenKeysDesktopShortcut \$\{LANG_SIMPCHINESE\}' -or
+    $script -notmatch 'ReadRegDWORD \$R0 SHCTX .*InstallerLanguage' -or
     $script -notmatch '创建桌面快捷方式' -or $script -notmatch '创建开始菜单快捷方式') {
-    throw 'Generated installer must have one Chinese shortcut page and no Start Menu folder page.'
+    throw 'Generated installer must have bilingual pages, recorded uninstall language and one shortcut page without a Start Menu folder page.'
 }
 $installRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('OpenKeys 安装 test ' + [guid]::NewGuid().ToString('N'))
 $desktopRoots = @(
@@ -121,69 +125,93 @@ $cases = @(
     @{ Options = '/DESKTOP=1 /STARTMENU=0'; Desktop = 1; Menu = 0 },
     @{ Options = '/DESKTOP=0 /STARTMENU=0'; Desktop = 0; Menu = 0 }
 )
-foreach ($case in $cases) {
-    $originalPath = $env:PATH
-    $installedLinks = @()
-    $uninstaller = Join-Path $installRoot 'Uninstall.exe'
-    try {
-        # NSIS requires /D to be last; the remainder is the directory, without quotes.
-        Invoke-CheckedProcess $installer "/S $($case.Options) /D=$installRoot"
-        $executable = Join-Path $installRoot 'openkeys.exe'
-        if (-not (Test-Path $executable -PathType Leaf)) { throw 'Installed application is missing.' }
-        $payload = @(Get-ChildItem -LiteralPath $installRoot -Recurse -File | Select-Object -ExpandProperty FullName)
-        if (-not ($payload | Where-Object { $_ -like '*.dll' }) -or
-            -not (Test-Path (Join-Path $installRoot 'docs')) -or
-            -not (Test-Path (Join-Path $installRoot 'licenses'))) {
-            throw 'Expected installed DLLs, documentation and licenses for cleanup coverage.'
-        }
-        $extraDirectory = Join-Path $installRoot '用户添加\嵌套目录'
-        New-Item -ItemType Directory -Path $extraDirectory -Force | Out-Null
-        $extraFile = Join-Path $extraDirectory '测试曲谱.txt'
-        Set-Content -LiteralPath $extraFile -Value 'must be removed' -Encoding UTF8
-        $desktop = @($desktopLinks | Where-Object { Test-Path $_ })
-        $startMenu = @(Find-StartMenuLinks)
-        if ($desktop.Count -ne $case.Desktop) { throw "Unexpected desktop shortcut count: $($desktop.Count)." }
-        if ($startMenu.Count -ne $case.Menu) { throw "Unexpected Start Menu shortcut count: $($startMenu.Count)." }
-        $installedLinks = @($desktop) + @($startMenu)
-        foreach ($link in $installedLinks) { Assert-Shortcut $link $executable }
-        $env:PATH = "$env:SystemRoot/System32;$env:SystemRoot"
-        Invoke-CheckedProcess $executable '--smoke-test'
-        foreach ($link in $installedLinks) { Invoke-CheckedProcess $link '--smoke-test' }
-        if ($case.Options -eq '') {
-            # Exercise uninstall-before-install with the old uninstaller running outside its directory.
-            Invoke-CheckedProcess $installer "/S /D=$installRoot"
-            if (Test-Path -LiteralPath $extraFile) { throw 'Upgrade did not clean the old installation directory.' }
-            Invoke-CheckedProcess $executable '--smoke-test'
-            New-Item -ItemType Directory -Path $extraDirectory -Force | Out-Null
-            Set-Content -LiteralPath $extraFile -Value 'must be removed' -Encoding UTF8
-        }
-    } finally {
-        $env:PATH = $originalPath
-        if (Test-Path $uninstaller) {
-            if ($case.Options -eq '') {
-                # A sharing violation must fail visibly and leave a working retry entry point.
-                $lock = [System.IO.File]::Open($extraFile, 'Open', 'Read', 'Read')
-                try { Invoke-Uninstall $uninstaller 1 } finally { $lock.Dispose() }
-                if (-not (Test-Path -LiteralPath $extraFile) -or -not (Test-Path -LiteralPath $uninstaller)) {
-                    throw 'Failed uninstall must retain locked files and a retry uninstaller.'
-                }
+foreach ($language in @(
+    @{ Id = 1033; Code = 'en'; UninstallLink = 'Uninstall.lnk' },
+    @{ Id = 2052; Code = 'zh_CN'; UninstallLink = '卸载.lnk' }
+)) {
+    foreach ($case in $cases) {
+        $originalPath = $env:PATH
+        $installedLinks = @()
+        $uninstaller = Join-Path $installRoot 'Uninstall.exe'
+        try {
+            # NSIS requires /D to be last; the remainder is the directory, without quotes.
+            Invoke-CheckedProcess $installer "/S /LANG=$($language.Id) $($case.Options) /D=$installRoot"
+            $initialLanguage = Get-Content -LiteralPath (Join-Path $installRoot 'install-language.ini') -Raw
+            if ($initialLanguage -notmatch "(?m)^language=$($language.Code)\s*$") {
+                throw "Unexpected initial language: $initialLanguage"
             }
-            Invoke-Uninstall $uninstaller
+            $records = @('Registry::HKEY_LOCAL_MACHINE\Software\OpenKeysPiano',
+                         'Registry::HKEY_LOCAL_MACHINE\Software\WOW6432Node\OpenKeysPiano') |
+                Where-Object { Test-Path $_ } | ForEach-Object { Get-ChildItem $_ } |
+                Where-Object { $_.GetValue('') -eq $installRoot }
+            $recordedLanguages = @($records | ForEach-Object { $_.GetValue('InstallerLanguage') })
+            if ($recordedLanguages.Count -ne 1 -or $recordedLanguages[0] -ne $language.Id) {
+                throw 'Installer language was not saved for uninstall.'
+            }
+            $executable = Join-Path $installRoot 'openkeys.exe'
+            if (-not (Test-Path $executable -PathType Leaf)) { throw 'Installed application is missing.' }
+            $payload = @(Get-ChildItem -LiteralPath $installRoot -Recurse -File | Select-Object -ExpandProperty FullName)
+            if (-not ($payload | Where-Object { $_ -like '*.dll' }) -or
+                -not (Test-Path (Join-Path $installRoot 'docs')) -or
+                -not (Test-Path (Join-Path $installRoot 'licenses'))) {
+                throw 'Expected installed DLLs, documentation and licenses for cleanup coverage.'
+            }
+            $extraDirectory = Join-Path $installRoot '用户添加\嵌套目录'
+            New-Item -ItemType Directory -Path $extraDirectory -Force | Out-Null
+            $extraFile = Join-Path $extraDirectory '测试曲谱.txt'
+            Set-Content -LiteralPath $extraFile -Value 'must be removed' -Encoding UTF8
+            $desktop = @($desktopLinks | Where-Object { Test-Path $_ })
+            $startMenu = @(Find-StartMenuLinks)
+            if ($desktop.Count -ne $case.Desktop) { throw "Unexpected desktop shortcut count: $($desktop.Count)." }
+            if ($startMenu.Count -ne $case.Menu) { throw "Unexpected Start Menu shortcut count: $($startMenu.Count)." }
+            $installedLinks = @($desktop) + @($startMenu)
+            foreach ($link in $installedLinks) { Assert-Shortcut $link $executable }
+            foreach ($appLink in $startMenu) {
+                $uninstallLink = Join-Path (Split-Path $appLink) $language.UninstallLink
+                Assert-Shortcut $uninstallLink $uninstaller
+                $installedLinks += $uninstallLink
+            }
+            $env:PATH = "$env:SystemRoot/System32;$env:SystemRoot"
+            foreach ($appLanguage in @('en', 'zh_CN')) {
+                Invoke-CheckedProcess $executable "--smoke-test --language $appLanguage"
+            }
+            foreach ($link in (@($desktop) + @($startMenu))) { Invoke-CheckedProcess $link '--smoke-test' }
+            if ($case.Options -eq '') {
+                # Exercise uninstall-before-install with the old uninstaller running outside its directory.
+                Invoke-CheckedProcess $installer "/S /LANG=$($language.Id) /D=$installRoot"
+                if (Test-Path -LiteralPath $extraFile) { throw 'Upgrade did not clean the old installation directory.' }
+                Invoke-CheckedProcess $executable '--smoke-test'
+                New-Item -ItemType Directory -Path $extraDirectory -Force | Out-Null
+                Set-Content -LiteralPath $extraFile -Value 'must be removed' -Encoding UTF8
+            }
+        } finally {
+            $env:PATH = $originalPath
+            if (Test-Path $uninstaller) {
+                if ($case.Options -eq '') {
+                    # A sharing violation must fail visibly and leave a working retry entry point.
+                    $lock = [System.IO.File]::Open($extraFile, 'Open', 'Read', 'Read')
+                    try { Invoke-Uninstall $uninstaller 1 } finally { $lock.Dispose() }
+                    if (-not (Test-Path -LiteralPath $extraFile) -or -not (Test-Path -LiteralPath $uninstaller)) {
+                        throw 'Failed uninstall must retain locked files and a retry uninstaller.'
+                    }
+                }
+                Invoke-Uninstall $uninstaller
+            }
+            $remainingLinks = @($installedLinks | Where-Object { Test-Path -LiteralPath $_ })
+            $remainingFiles = @($payload | Where-Object { Test-Path -LiteralPath $_ })
+            if ((Test-Path -LiteralPath $installRoot) -or $remainingLinks -or $remainingFiles) {
+                $remaining = @(Get-ChildItem -LiteralPath $installRoot -Force -Recurse -ErrorAction SilentlyContinue |
+                    Select-Object -ExpandProperty FullName)
+                throw "Uninstall left installation contents or shortcuts: $($remaining + $remainingLinks -join ', ')"
+            }
+            if (-not (Test-Path -LiteralPath $outsideFile) -or
+                (Get-Content -LiteralPath $outsideFile -Raw).Trim() -ne 'must survive uninstall') {
+                throw 'Uninstall modified data outside the installation directory.'
+            }
         }
-        $remainingLinks = @($installedLinks | Where-Object { Test-Path -LiteralPath $_ })
-        $remainingFiles = @($payload | Where-Object { Test-Path -LiteralPath $_ })
-        if ((Test-Path -LiteralPath $installRoot) -or $remainingLinks -or $remainingFiles) {
-            $remaining = @(Get-ChildItem -LiteralPath $installRoot -Force -Recurse -ErrorAction SilentlyContinue |
-                Select-Object -ExpandProperty FullName)
-            throw "Uninstall left installation contents or shortcuts: $($remaining + $remainingLinks -join ', ')"
-        }
-        if (-not (Test-Path -LiteralPath $outsideFile) -or
-            (Get-Content -LiteralPath $outsideFile -Raw).Trim() -ne 'must survive uninstall') {
-            throw 'Uninstall modified data outside the installation directory.'
-        }
-    }
 
-Write-Host "Verified shortcut options: $($case.Options)"
+    Write-Host "Verified language $($language.Code), shortcut options: $($case.Options)"
+    }
 }
 Remove-Item -LiteralPath $outsideFile
-Write-Host 'Installer verified: Unicode/spaced path, defaults and all shortcut combinations, startup, locked-file failure and complete installation-directory removal.'
+Write-Host 'Installer verified: both languages, recorded uninstall locale, Unicode/spaced path, defaults and all shortcut combinations, startup, locked-file failure and complete installation-directory removal.'

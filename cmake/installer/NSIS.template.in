@@ -28,6 +28,10 @@
 ;Include Modern UI
 
   !include "MUI.nsh"
+  !define MUI_LANGDLL_ALWAYSSHOW
+  !define MUI_LANGDLL_ALLLANGUAGES
+  !define MUI_LANGDLL_WINDOWTITLE "Language / 语言"
+  !define MUI_LANGDLL_INFO "Please select a language / 请选择安装语言"
   !include "nsDialogs.nsh"
   !include "FileFunc.nsh"
 
@@ -39,7 +43,7 @@
 
   ;Name and file
   Name "@CPACK_NSIS_PACKAGE_NAME@"
-  BrandingText "OpenKeys Piano 安装程序"
+  BrandingText "$(OpenKeysBranding)"
   OutFile "@CPACK_TOPLEVEL_DIRECTORY@/@CPACK_OUTPUT_FILE_NAME@"
 
   ;Set compression
@@ -182,11 +186,11 @@ Var AR_RegFlags
 !macro select_NT_profile UN
 Function ${UN}select_NT_profile
    StrCmp $ADD_TO_PATH_ALL_USERS "1" 0 environment_single
-      DetailPrint "为所有用户设置环境"
+      DetailPrint "$(OpenKeysAllUsers)"
       Push "all"
       Return
    environment_single:
-      DetailPrint "为当前用户设置环境"
+      DetailPrint "$(OpenKeysCurrentUser)"
       Push "current"
       Return
 FunctionEnd
@@ -293,7 +297,6 @@ Function AddToPath
     Pop $1
     Pop $0
 FunctionEnd
-
 
 ; RemoveFromPath - Remove a given dir from the path
 ;     Input: head of the stack
@@ -503,7 +506,7 @@ Function ConditionalAddToRegistry
     WriteRegStr SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\@CPACK_PACKAGE_INSTALL_REGISTRY_KEY@" \
     "$1" "$0"
     ;MessageBox MB_OK "Set Registry: '$1' to '$0'"
-    DetailPrint "写入安装注册信息：'$1' = '$0'"
+    DetailPrint "$(OpenKeysRegistry)"
   ConditionalAddToRegistry_EmptyString:
 FunctionEnd
 
@@ -527,7 +530,7 @@ Function DownloadFile
     Pop $1
     StrCmp $1 "success" success
     StrCmp $1 "Cancelled" cancel
-    MessageBox MB_OK "下载失败：$1"
+    MessageBox MB_OK "$(OpenKeysDownloadFailed)"
   cancel:
     Return
   success:
@@ -564,29 +567,38 @@ FunctionEnd
 
 ;--------------------------------
 ;Languages
+  !insertmacro MUI_LANGUAGE "English"
   !insertmacro MUI_LANGUAGE "SimpChinese"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  LangString OpenKeysInvalidLanguage ${LANG_ENGLISH} "Invalid /LANG value. Use 1033 (English) or 2052 (Simplified Chinese)."
+  LangString OpenKeysInvalidLanguage ${LANG_SIMPCHINESE} "/LANG 参数无效，请使用 1033（英文）或 2052（简体中文）。"
+  LangString OpenKeysBranding ${LANG_ENGLISH} "OpenKeys Piano Setup"
+  LangString OpenKeysBranding ${LANG_SIMPCHINESE} "OpenKeys Piano 安装程序"
+  LangString OpenKeysAllUsers ${LANG_ENGLISH} "Setting environment for all users"
+  LangString OpenKeysAllUsers ${LANG_SIMPCHINESE} "为所有用户设置环境"
+  LangString OpenKeysCurrentUser ${LANG_ENGLISH} "Setting environment for the current user"
+  LangString OpenKeysCurrentUser ${LANG_SIMPCHINESE} "为当前用户设置环境"
+  LangString OpenKeysRegistry ${LANG_ENGLISH} "Writing installation registry value: '$1' = '$0'"
+  LangString OpenKeysRegistry ${LANG_SIMPCHINESE} "写入安装注册信息：'$1' = '$0'"
+  LangString OpenKeysDownloadFailed ${LANG_ENGLISH} "Download failed: $1"
+  LangString OpenKeysDownloadFailed ${LANG_SIMPCHINESE} "下载失败：$1"
+  LangString OpenKeysShortcuts ${LANG_ENGLISH} "Shortcuts"
+  LangString OpenKeysShortcuts ${LANG_SIMPCHINESE} "快捷方式"
+  LangString OpenKeysChooseShortcuts ${LANG_ENGLISH} "Choose which shortcuts to create"
+  LangString OpenKeysChooseShortcuts ${LANG_SIMPCHINESE} "选择要创建的快捷方式"
+  LangString OpenKeysDesktopShortcut ${LANG_ENGLISH} "Create a desktop shortcut"
+  LangString OpenKeysDesktopShortcut ${LANG_SIMPCHINESE} "创建桌面快捷方式"
+  LangString OpenKeysMenuShortcut ${LANG_ENGLISH} "Create Start Menu shortcuts"
+  LangString OpenKeysMenuShortcut ${LANG_SIMPCHINESE} "创建开始菜单快捷方式"
+  LangString OpenKeysUninstallLink ${LANG_ENGLISH} "Uninstall"
+  LangString OpenKeysUninstallLink ${LANG_SIMPCHINESE} "卸载"
+  LangString OpenKeysCleanupFailed ${LANG_ENGLISH} "Uninstall failed: could not completely remove $INSTDIR. Close related programs and check directory permissions, then try again."
+  LangString OpenKeysCleanupFailed ${LANG_SIMPCHINESE} "卸载失败：无法完整清理安装目录 $INSTDIR。请关闭相关程序并检查目录权限后重试。"
+  LangString OpenKeysCleanupMessage ${LANG_ENGLISH} "Could not completely remove the installation directory: $INSTDIR$\r$\nClose related programs and check directory permissions, then try again."
+  LangString OpenKeysCleanupMessage ${LANG_SIMPCHINESE} "无法完整清理安装目录：$INSTDIR$\r$\n请关闭相关程序并检查目录权限后重试。"
+  LangString OpenKeysUpgradeQuestion ${LANG_ENGLISH} "$1 is already installed.$\n$\nUninstall the previous version before installing the new version?"
+  LangString OpenKeysUpgradeQuestion ${LANG_SIMPCHINESE} "$1 已安装。$\n$\n是否先卸载旧版本再安装新版本？"
+  LangString OpenKeysUpgradeFailed ${LANG_ENGLISH} "Could not uninstall the previous version."
+  LangString OpenKeysUpgradeFailed ${LANG_SIMPCHINESE} "卸载旧版本失败。"
 
 
 
@@ -640,6 +652,7 @@ FunctionEnd
 
   ReserveFile "NSIS.InstallOptions.ini"
   !insertmacro MUI_RESERVEFILE_INSTALLOPTIONS
+  !insertmacro MUI_RESERVEFILE_LANGDLL
 
   ; for UserInfo::GetName and UserInfo::GetAccountType
   ReserveFile /plugin 'UserInfo.dll'
@@ -655,7 +668,7 @@ FunctionEnd
 ;--------------------------------
 ;Installer Sections
 
-Section "-安装程序文件"
+Section "-Application Files"
   ;Use the entire tree produced by the INSTALL target.  Keep the
   ;list of directories here in sync with the RMDir commands below.
   SetOutPath "$INSTDIR"
@@ -664,6 +677,12 @@ Section "-安装程序文件"
 
   ;Store installation folder
   WriteRegStr SHCTX "Software\@CPACK_PACKAGE_VENDOR@\@CPACK_PACKAGE_INSTALL_REGISTRY_KEY@" "" $INSTDIR
+
+  WriteRegDWORD SHCTX "Software\@CPACK_PACKAGE_VENDOR@\@CPACK_PACKAGE_INSTALL_REGISTRY_KEY@" "InstallerLanguage" $LANGUAGE
+  StrCpy $R0 "en"
+  StrCmp $LANGUAGE ${LANG_SIMPCHINESE} 0 +2
+    StrCpy $R0 "zh_CN"
+  WriteINIStr "$INSTDIR\install-language.ini" "General" "language" $R0
 
   ;Create uninstaller
   WriteUninstaller "$INSTDIR\@CPACK_NSIS_UNINSTALL_NAME@.exe"
@@ -717,7 +736,7 @@ Section "-安装程序文件"
     StrCpy $STARTMENU_FOLDER "OpenKeys Piano"
     CreateDirectory "$SMPROGRAMS\$STARTMENU_FOLDER"
     CreateShortCut "$SMPROGRAMS\$STARTMENU_FOLDER\OpenKeys Piano.lnk" "$INSTDIR\openkeys.exe"
-    CreateShortCut "$SMPROGRAMS\$STARTMENU_FOLDER\卸载.lnk" "$INSTDIR\@CPACK_NSIS_UNINSTALL_NAME@.exe"
+    CreateShortCut "$SMPROGRAMS\$STARTMENU_FOLDER\$(OpenKeysUninstallLink).lnk" "$INSTDIR\@CPACK_NSIS_UNINSTALL_NAME@.exe"
   menu_done:
   WriteRegStr SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\@CPACK_PACKAGE_INSTALL_REGISTRY_KEY@" "StartMenu" $STARTMENU_FOLDER
   WriteRegStr SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\@CPACK_PACKAGE_INSTALL_REGISTRY_KEY@" "InstallToDesktop" $INSTALL_DESKTOP
@@ -728,13 +747,13 @@ Section "-安装程序文件"
 SectionEnd
 
 Function InstallOptionsPage
-  !insertmacro MUI_HEADER_TEXT "快捷方式" "选择要创建的快捷方式"
+  !insertmacro MUI_HEADER_TEXT "$(OpenKeysShortcuts)" "$(OpenKeysChooseShortcuts)"
   nsDialogs::Create 1018
   Pop $OpenKeysDialog
-  ${NSD_CreateCheckbox} 0 10u 100% 12u "创建桌面快捷方式"
+  ${NSD_CreateCheckbox} 0 10u 100% 12u "$(OpenKeysDesktopShortcut)"
   Pop $OpenKeysDesktopCheckbox
   ${NSD_SetState} $OpenKeysDesktopCheckbox $INSTALL_DESKTOP
-  ${NSD_CreateCheckbox} 0 34u 100% 12u "创建开始菜单快捷方式"
+  ${NSD_CreateCheckbox} 0 34u 100% 12u "$(OpenKeysMenuShortcut)"
   Pop $OpenKeysMenuCheckbox
   ${NSD_SetState} $OpenKeysMenuCheckbox $INSTALL_STARTMENU
   nsDialogs::Show
@@ -768,6 +787,13 @@ Function un.onInit
     ;Get installation folder from registry if available
 
   done:
+  Call un.OpenKeysSystemLanguage
+  ReadRegDWORD $R0 SHCTX "Software\@CPACK_PACKAGE_VENDOR@\@CPACK_PACKAGE_INSTALL_REGISTRY_KEY@" "InstallerLanguage"
+  StrCmp $R0 "1033" use_saved_language
+  StrCmp $R0 "2052" 0 language_ready
+  use_saved_language:
+    StrCpy $LANGUAGE $R0
+  language_ready:
 
 FunctionEnd
 
@@ -882,9 +908,9 @@ Section "Uninstall"
     ; Keep a usable retry entry point if a locked file prevented complete removal.
     CopyFiles /SILENT "$EXEPATH" "$INSTDIR\@CPACK_NSIS_UNINSTALL_NAME@.exe"
   uninstall_failed:
-    DetailPrint "卸载失败：无法完整清理安装目录 $INSTDIR。请关闭相关程序并检查目录权限后重试。"
+    DetailPrint "$(OpenKeysCleanupFailed)"
     IfSilent +2
-      MessageBox MB_OK|MB_ICONSTOP "无法完整清理安装目录：$INSTDIR$\r$\n请关闭相关程序并检查目录权限后重试。"
+      MessageBox MB_OK|MB_ICONSTOP "$(OpenKeysCleanupMessage)"
     SetErrorLevel 1
     Quit
   uninstall_done:
@@ -900,7 +926,42 @@ SectionEnd
 ; Choose different default installation folder based on SV_ALLUSERS...
 ; "Program Files" for AllUsers, "My Documents" for JustMe...
 
+; English fallback for unsupported system languages, including old installations.
+!macro OpenKeysSystemLanguage PREFIX
+Function ${PREFIX}OpenKeysSystemLanguage
+  System::Call 'kernel32::GetUserDefaultUILanguage() i.r0'
+  IntOp $0 $0 & 0x3ff
+  StrCpy $LANGUAGE "1033"
+  StrCmp $0 "4" 0 +2
+    StrCpy $LANGUAGE "2052"
+FunctionEnd
+!macroend
+!insertmacro OpenKeysSystemLanguage ""
+!insertmacro OpenKeysSystemLanguage "un."
+
+Function OpenKeysSelectLanguage
+  Call OpenKeysSystemLanguage
+  ${GetParameters} $R0
+  StrCpy $R1 ""
+  ${GetOptions} $R0 "/LANG=" $R1
+  IfErrors show_language_dialog
+  StrCmp $R1 "1033" selected_language
+  StrCmp $R1 "2052" selected_language
+  IfSilent +2
+    MessageBox MB_OK|MB_ICONSTOP "$(OpenKeysInvalidLanguage)"
+  SetErrorLevel 2
+  Quit
+  selected_language:
+    StrCpy $LANGUAGE $R1
+    Return
+  show_language_dialog:
+    IfSilent language_selected
+    !insertmacro MUI_LANGDLL_DISPLAY
+  language_selected:
+FunctionEnd
+
 Function .onInit
+  Call OpenKeysSelectLanguage
   StrCpy $INSTALL_DESKTOP "1"
   StrCpy $INSTALL_STARTMENU "1"
   ${GetParameters} $R0
@@ -919,7 +980,7 @@ Function .onInit
 
   ReadRegStr $1 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\@CPACK_PACKAGE_INSTALL_REGISTRY_KEY@" "DisplayName"
   MessageBox MB_YESNOCANCEL|MB_ICONEXCLAMATION \
-  "$1 已安装。$\n$\n是否先卸载旧版本再安装新版本？" \
+  "$(OpenKeysUpgradeQuestion)" \
   /SD IDYES IDYES uninst IDNO inst
   Abort
 
@@ -947,9 +1008,8 @@ uninst:
   IfErrors uninst_failed
   StrCmp $4 "0" inst uninst_failed
 uninst_failed:
-  MessageBox MB_OK|MB_ICONSTOP "卸载旧版本失败。"
+  MessageBox MB_OK|MB_ICONSTOP "$(OpenKeysUpgradeFailed)"
   Abort
-
 
 inst:
   ; Reads components status for registry

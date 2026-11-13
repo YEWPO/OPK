@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install development libraries
-        run: sudo apt-get update && sudo apt-get install -y ninja-build libfluidsynth-dev portaudio19-dev libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libfluidsynth-dev portaudio19-dev libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 python3-pil
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -26,6 +26,8 @@ jobs:
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
       - name: Build
         run: cmake --build build --parallel 4
+      - name: Verify documentation and image resources
+        run: /usr/bin/python3 tools/verify_resources.py
       - name: Test
         run: ctest --test-dir build --output-on-failure
   windows:
@@ -65,6 +67,11 @@ jobs:
           QT_LOGGING_TO_CONSOLE: '1'
           QT_ASSUME_STDERR_HAS_CONSOLE: '1'
         run: ctest --preset windows-release
+      - name: Verify documentation and image resources
+        run: |
+          python -m pip install Pillow
+          python tools/verify_resources.py
+          if ($LASTEXITCODE) { throw 'Resource verification failed' }
       - name: Stage application
         run: cmake --install build-windows-release --config Release --prefix "${{ github.workspace }}/dist/application"
       - name: Verify application has no soundfonts and starts without developer DLLs
@@ -75,12 +82,14 @@ jobs:
           $originalPath = $env:PATH
           $env:PATH = "$env:SystemRoot/System32;$env:SystemRoot"
           try {
-            $process = Start-Process ./dist/application/openkeys.exe -ArgumentList '--smoke-test' -PassThru
-            if (-not $process.WaitForExit(30000)) {
-              $process.Kill($true)
-              throw 'Staged executable timed out after 30 seconds'
+            foreach ($language in @('en', 'zh_CN')) {
+              $process = Start-Process ./dist/application/openkeys.exe -ArgumentList "--smoke-test --language $language" -PassThru
+              if (-not $process.WaitForExit(30000)) {
+                $process.Kill($true)
+                throw 'Staged executable timed out after 30 seconds'
+              }
+              if ($process.ExitCode) { throw "Staged executable failed: $($process.ExitCode)" }
             }
-            if ($process.ExitCode) { throw "Staged executable failed: $($process.ExitCode)" }
           } finally { $env:PATH = $originalPath }
       - name: Upload application (import tutorial included)
         uses: actions/upload-artifact@v4

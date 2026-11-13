@@ -1,4 +1,5 @@
 #include "core/model.h"
+#include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -10,32 +11,36 @@ int64_t integer(const QJsonObject &o, const char *field, int64_t lo, int64_t hi)
     const auto v = o.value(QLatin1String(field));
     const double n = v.toDouble(-1);
     if (!v.isDouble() || !std::isfinite(n) || std::floor(n) != n || n < double(lo) || n > double(hi))
-        throw FileError("invalid_recording", QString("Invalid integer: %1").arg(field));
+        throw FileError("invalid_recording",
+                        QCoreApplication::translate("OpenKeys", "Invalid integer: %1").arg(field));
     return int64_t(n);
 }
 } // namespace
 Song readRecording(const QByteArray &data) {
     if (data.size() > MaxFileBytes)
-        throw FileError("file_too_large", "Recording exceeds 64 MiB");
+        throw FileError("file_too_large",
+                        QCoreApplication::translate("OpenKeys", "Recording exceeds 64 MiB"));
     QJsonParseError error;
     const auto doc = QJsonDocument::fromJson(data, &error);
     if (error.error != QJsonParseError::NoError || !doc.isObject())
-        throw FileError("invalid_recording", "Expected JSON object");
+        throw FileError("invalid_recording", QCoreApplication::translate("OpenKeys", "Expected JSON object"));
     const auto o = doc.object();
     if (o.value("format") != "openkeys-recording" || integer(o, "version", 1, 1) != 1)
-        throw FileError("unsupported_recording", "Unknown recording format/version");
+        throw FileError("unsupported_recording",
+                        QCoreApplication::translate("OpenKeys", "Unknown recording format/version"));
     if (!o.value("events").isArray())
-        throw FileError("invalid_recording", "Missing events array");
+        throw FileError("invalid_recording", QCoreApplication::translate("OpenKeys", "Missing events array"));
     Song song;
     song.title = o.value("title").toString();
     song.author = o.value("author").toString();
     const auto entries = o.value("events").toArray();
     if (size_t(entries.size()) > MaxEvents)
-        throw FileError("too_many_events", "Event limit exceeded");
+        throw FileError("too_many_events", QCoreApplication::translate("OpenKeys", "Event limit exceeded"));
     song.events.reserve(size_t(entries.size()));
     for (const auto &value : entries) {
         if (!value.isObject())
-            throw FileError("invalid_recording", "Event must be an object");
+            throw FileError("invalid_recording",
+                            QCoreApplication::translate("OpenKeys", "Event must be an object"));
         const auto item = value.toObject();
         Event e;
         e.timeUs = integer(item, "timeUs", 0, MaxSongUs);
@@ -47,7 +52,8 @@ Song readRecording(const QByteArray &data) {
         else if (type == "sustain")
             e.kind = Kind::Sustain;
         else
-            throw FileError("invalid_recording", "Unknown event type");
+            throw FileError("invalid_recording",
+                            QCoreApplication::translate("OpenKeys", "Unknown event type"));
         e.note = uint8_t(integer(item, "note", 0, 127));
         e.velocity = uint8_t(integer(item, "velocity", 0, 127));
         e.hand = Hand(integer(item, "hand", 0, 2));
@@ -56,13 +62,16 @@ Song readRecording(const QByteArray &data) {
     }
     if (o.contains("configurations")) {
         if (!o.value("configurations").isArray())
-            throw FileError("invalid_recording", "Expected configurations array");
+            throw FileError("invalid_recording",
+                            QCoreApplication::translate("OpenKeys", "Expected configurations array"));
         const auto configs = o.value("configurations").toArray();
         if (size_t(configs.size()) > MaxEvents)
-            throw FileError("too_many_events", "Configuration limit exceeded");
+            throw FileError("too_many_events",
+                            QCoreApplication::translate("OpenKeys", "Configuration limit exceeded"));
         for (const auto &value : configs) {
             if (!value.isObject())
-                throw FileError("invalid_recording", "Expected configuration object");
+                throw FileError("invalid_recording",
+                                QCoreApplication::translate("OpenKeys", "Expected configuration object"));
             const auto item = value.toObject();
             PerformanceConfig config;
             config.timeUs = integer(item, "timeUs", 0, MaxSongUs);
@@ -112,7 +121,8 @@ void saveRecording(const QString &path, const Song &song) {
                                                        {"configurations", configs}})
                                  .toJson(QJsonDocument::Compact);
     if (bytes.size() > MaxFileBytes)
-        throw FileError("file_too_large", "Recording exceeds 64 MiB");
+        throw FileError("file_too_large",
+                        QCoreApplication::translate("OpenKeys", "Recording exceeds 64 MiB"));
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
         throw FileError("io_error", file.errorString());

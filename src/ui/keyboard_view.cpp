@@ -1,4 +1,5 @@
 #include "ui/keyboard_view.h"
+#include <QCoreApplication>
 #include <QMouseEvent>
 #include <QPainter>
 #include <algorithm>
@@ -38,7 +39,8 @@ void KeyboardView::paintEvent(QPaintEvent *) {
     p.setFont(QFont("sans-serif", 9));
     p.drawText(
         QRectF(16, 7, width() - 32, 20),
-        "电脑键盘  /  左键点击或拖动演奏 · 右键编辑          左手 · 绿色     右手 · 紫色     回放 · 金色");
+        QCoreApplication::translate("OpenKeys", "Computer keyboard · Click or drag to play · Right-click to "
+                                                "edit   |   Left: green · Right: purple · Playback: gold"));
     for (const auto &key : physicalKeys()) {
         const auto r = keyRect(key);
         const auto it = map.bindings.find(key.code);
@@ -61,26 +63,27 @@ void KeyboardView::paintEvent(QPaintEvent *) {
         p.drawRoundedRect(r, 5, 5);
         p.setPen(ink);
         p.setFont(QFont("sans-serif", 9));
-        p.drawText(r.adjusted(7, 3, -4, -4), Qt::AlignTop | Qt::AlignLeft, QString::fromUtf8(key.label));
+        p.drawText(r.adjusted(7, 3, -4, -4), Qt::AlignTop | Qt::AlignLeft,
+                   QCoreApplication::translate("OpenKeys", key.label));
         QString label;
         if (it != map.bindings.end()) {
             const auto &binding = it->second;
             const int hand = binding.hand == Hand::Left ? 0 : 1;
-            label = binding.sustain ? QStringLiteral("延音")
+            label = binding.sustain ? QCoreApplication::translate("OpenKeys", "Sustain")
                                     : noteName(binding.note + map.transpose + 12 * map.octave[size_t(hand)]);
         } else if (key.code == 42)
-            label = "弱奏";
+            label = QCoreApplication::translate("OpenKeys", "Soft");
         else if (key.code == 54)
-            label = "强奏";
+            label = QCoreApplication::translate("OpenKeys", "Loud");
         p.setPen(accent);
         p.setFont(QFont("sans-serif", 9));
         p.drawText(r.adjusted(3, 12, -5, -3), Qt::AlignBottom | Qt::AlignRight, label);
     }
     const auto area = pianoRect();
     p.setPen(muted);
-    p.drawText(
-        QRectF(16, area.top() - 27, width() - 32, 22),
-        "钢琴  /  A0–C8 · 点击或拖动演奏                      Space 延音 · 左 Shift 弱奏 · 右 Shift 强奏");
+    p.drawText(QRectF(16, area.top() - 27, width() - 32, 22),
+               QCoreApplication::translate("OpenKeys", "Piano · A0–C8 · Click or drag to play   |   Space: "
+                                                       "sustain · Left Shift: soft · Right Shift: loud"));
     const double w = area.width() / 52.;
     int index = 0;
     for (int n = 21; n <= 108; ++n) {
@@ -158,7 +161,10 @@ void KeyboardView::updateHover(QPointF point) {
     const bool overFn = std::any_of(physicalKeys().begin(), physicalKeys().end(), [&](const auto &key) {
         return !key.code && keyRect(key).contains(point);
     });
-    setToolTip(overFn ? QStringLiteral("Fn 仅用于布局展示，不支持演奏或编辑。") : QString());
+    setToolTip(overFn
+                   ? QCoreApplication::translate(
+                         "OpenKeys", "Fn is shown for layout reference only; it cannot be played or edited.")
+                   : QString());
     hoverKey_ = hitKey(point);
     hoverNote_ = hitNote(point);
     setCursor(hoverKey_ || hoverNote_ >= 0 ? Qt::PointingHandCursor : Qt::ArrowCursor);

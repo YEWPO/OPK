@@ -7,9 +7,32 @@
     {
       "name": "qtbase",
       "default-features": false,
-      "features": ["concurrent", "widgets", "testlib", "icu", "png"]
+      "features": [
+        "concurrent",
+        "widgets",
+        "testlib",
+        "icu",
+        "png"
+      ]
     },
-    {"name": "fluidsynth", "default-features": false},
-    {"name": "portaudio", "default-features": false}
+    {
+      "name": "fluidsynth",
+      "default-features": false
+    },
+    {
+      "name": "portaudio",
+      "default-features": false
+    },
+    {
+      "name": "qttools",
+      "default-features": false,
+      "features": [
+        "linguist"
+      ]
+    },
+    {
+      "name": "qttranslations",
+      "default-features": false
+    }
   ]
 }

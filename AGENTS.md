@@ -1,22 +1,24 @@
-# 仓库 Agent 工作规则
+# Repository agent rules
 
-本文件适用于整个仓库。每次修改任务都必须以最终提交对应的远程 GitHub Actions 全部通过为完成条件，文档修改也不例外。
+[简体中文](AGENTS.zh-CN.md)
 
-## 修改、提交与推送
+These rules apply to the entire repository. Every modification task, including documentation changes, is complete only after all remote GitHub Actions for its final commit have passed.
 
-1. 修改前检查工作区，保留用户已有修改；提交时只纳入本次任务的文件或变更片段。
-2. 完成修改后，执行与变更相关的本地检查，并检查 diff；本地检查通过不能代替远程验证。
-3. 自动提交本次任务修改并推送当前工作分支，无需每次重复询问。不得强制推送，不得覆盖或丢弃用户修改。推送被拒绝时先检查远程分支状态，安全处理后再继续。
+## Changes, commits and pushes
 
-## 远程 Actions 完成门槛
+1. Inspect the worktree before editing and preserve the user's existing changes. Commit only files or change fragments belonging to the current task.
+2. Run relevant local checks and review the diff after editing. Passing local checks does not replace remote verification.
+3. Automatically commit this task's changes and push the current working branch without asking each time. Never force-push, overwrite or discard user changes. If a push is rejected, inspect the remote branch and resolve it safely before continuing.
 
-1. 以最终提交的完整 SHA 查询远程 Actions，确认预期工作流已经触发；不能使用旧提交的成功结果作为证据。
-2. 等待该提交对应的全部 Actions 运行结束并成功。现有 `Build and verify` 工作流的 `linux` 和 `windows` 作业均必须成功，包括该次运行触发的打包、安装和卸载验证步骤。
-3. 排队、运行中、失败、取消、超时、等待审批或未触发均不算通过。工作流按条件正常跳过的步骤可以接受，但预期工作流及必需作业被跳过不能算通过。
-4. 检查失败时，读取失败作业日志，修复问题，重新执行相关本地检查、提交并推送；重复验证，直到最终提交对应的全部远程 Actions 成功。任何新提交都必须重新验证。
-5. 不得通过禁用工作流、删除检查、跳过必需测试、忽略失败或降低检查标准来获得通过结果。
-6. 权限、网络、外部服务或需要用户决策的问题阻塞验证时，明确报告阻塞原因和当前状态，不能宣称任务完成或远程验证通过。
+## Remote Actions completion gate
 
-## 最终回复
+1. Query remote Actions using the final commit's complete SHA and confirm the expected workflows were triggered. Success for an older commit is not evidence.
+2. Wait for all Actions runs for that commit to finish successfully. Both `linux` and `windows` jobs in the existing `Build and verify` workflow must pass, including packaging, installation and uninstallation verification triggered by that run.
+3. Queued, running, failed, cancelled, timed out, awaiting approval and untriggered checks do not count as passing. Steps legitimately skipped by workflow conditions are acceptable; skipped expected workflows or required jobs are not.
+4. On failure, read the failing job's logs, fix the problem, rerun relevant local checks, commit and push. Repeat until all remote Actions for the final commit succeed. Every new commit requires fresh verification.
+5. Never disable workflows, delete checks, skip required tests, ignore failures or lower verification standards to obtain a passing result.
+6. If permissions, networking, external services or a required user decision block verification, report the reason and current status explicitly. Do not claim completion or successful remote verification.
 
-说明修改内容和本地验证结果，附上最终提交 SHA、对应 Actions 运行链接及远程验证结果。只有满足上述完成门槛后，才能报告任务完成。
+## Final response
+
+Explain the changes and local validation results. Include the final commit SHA, corresponding Actions run links and remote verification results. Report completion only after the gate above is satisfied.

@@ -1,4 +1,5 @@
 #include "audio/soundfont_import.h"
+#include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -15,7 +16,8 @@ namespace piano {
 namespace {
 void notify(const ImportProgress &progress, ImportPhase phase, int percent) {
     if (progress && !progress(phase, percent))
-        throw FileError("import_cancelled", QStringLiteral("音源导入已取消。"));
+        throw FileError("import_cancelled",
+                        QCoreApplication::translate("OpenKeys", "Soundfont import cancelled."));
 }
 void commitInfo(const QString &directory, const ImportedFontInfo &info) {
     const auto bytes =
@@ -23,13 +25,15 @@ void commitInfo(const QString &directory, const ImportedFontInfo &info) {
     QSaveFile file(QDir(directory).filePath("current.json"));
     if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
         throw FileError("import_settings_failed",
-                        QStringLiteral("无法保存音源配置：%1").arg(file.errorString()));
+                        QCoreApplication::translate("OpenKeys", "Could not save soundfont settings: %1")
+                            .arg(file.errorString()));
 }
 QByteArray fileHash(const QString &path) {
     QFile file(path);
     QCryptographicHash hash(QCryptographicHash::Sha256);
     if (!file.open(QIODevice::ReadOnly) || !hash.addData(&file))
-        throw FileError("import_read_failed", QStringLiteral("无法读取已有音源副本。"));
+        throw FileError("import_read_failed", QCoreApplication::translate(
+                                                  "OpenKeys", "Could not read the existing soundfont copy."));
     return hash.result().toHex();
 }
 } // namespace
@@ -45,7 +49,10 @@ ImportedFontInfo readImportedSoundfont(const QString &directory) {
         return {};
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly) || file.size() > 16384)
-        throw FileError("invalid_soundfont_settings", QStringLiteral("无法读取音源配置，请重新导入音源。"));
+        throw FileError(
+            "invalid_soundfont_settings",
+            QCoreApplication::translate(
+                "OpenKeys", "Could not read soundfont settings. Please import the soundfont again."));
     QJsonParseError error;
     const auto doc = QJsonDocument::fromJson(file.readAll(), &error);
     const auto object = doc.object();
@@ -53,7 +60,10 @@ ImportedFontInfo readImportedSoundfont(const QString &directory) {
     const auto managed = managedSoundfontPath(directory, id);
     if (error.error != QJsonParseError::NoError || !doc.isObject() ||
         object.value("version").toDouble() != 1 || managed.isEmpty() || !object.value("name").isString())
-        throw FileError("invalid_soundfont_settings", QStringLiteral("音源配置已损坏，请重新导入音源。"));
+        throw FileError(
+            "invalid_soundfont_settings",
+            QCoreApplication::translate(
+                "OpenKeys", "Soundfont settings are damaged. Please import the soundfont again."));
     return {id, object.value("name").toString(), managed};
 }
 ImportedSoundfont importSoundfont(const QString &source, const QString &directory, double sampleRate,
@@ -64,21 +74,28 @@ ImportedSoundfont importSoundfont(const QString &source, const QString &director
         notify(progress, ImportPhase::Copying, 0);
         QFile input(source);
         if (!source.endsWith(".sf2", Qt::CaseInsensitive))
-            throw FileError(
-                "unsupported_soundfont",
-                QStringLiteral("请选择解压后的 .sf2 音源文件；压缩包、SFZ 和 VST 插件不能直接导入。"));
+            throw FileError("unsupported_soundfont",
+                            QCoreApplication::translate(
+                                "OpenKeys", "Choose an extracted .sf2 soundfont file. Archives, SFZ files "
+                                            "and VST plugins cannot be imported directly."));
         if (!input.open(QIODevice::ReadOnly))
             throw FileError("import_read_failed",
-                            QStringLiteral("无法读取音源：%1").arg(input.errorString()));
+                            QCoreApplication::translate("OpenKeys", "Could not read the soundfont: %1")
+                                .arg(input.errorString()));
         const auto total = input.size();
         const auto header = input.peek(12);
         if (total < 12 || header.first(4) != "RIFF" || header.mid(8, 4) != "sfbk" ||
             quint64(qFromLittleEndian<quint32>(header.constData() + 4)) + 8 != quint64(total))
-            throw FileError("invalid_soundfont",
-                            QStringLiteral("文件不是完整的 SF2 音源，请检查是否已解压或重新下载。"));
+            throw FileError(
+                "invalid_soundfont",
+                QCoreApplication::translate(
+                    "OpenKeys",
+                    "This file is not a complete SF2 soundfont. Extract the archive or download it again."));
         if (!QDir().mkpath(directory))
-            throw FileError("import_write_failed",
-                            QStringLiteral("无法创建音源保存目录，请检查磁盘空间和写入权限。"));
+            throw FileError(
+                "import_write_failed",
+                QCoreApplication::translate("OpenKeys", "Could not create the soundfont directory. Check "
+                                                        "free disk space and write permissions."));
         try {
             result.previousId = readImportedSoundfont(directory).id;
         } catch (const FileError &) {
@@ -86,22 +103,29 @@ ImportedSoundfont importSoundfont(const QString &source, const QString &director
         QTemporaryFile staging(QDir(directory).filePath(".import-XXXXXX.sf2"));
         if (!staging.open())
             throw FileError("import_write_failed",
-                            QStringLiteral("无法写入音源副本：%1").arg(staging.errorString()));
+                            QCoreApplication::translate("OpenKeys", "Could not write the soundfont copy: %1")
+                                .arg(staging.errorString()));
         QCryptographicHash hash(QCryptographicHash::Sha256);
         qint64 copied = 0;
         int lastProgress = -1;
         while (!input.atEnd()) {
             const auto bytes = input.read(1024 * 1024);
             if (input.error() != QFileDevice::NoError || bytes.isEmpty())
-                throw FileError("import_read_failed", QStringLiteral("音源读取中断，原音源和原配置已保留。"));
-            if (staging.write(bytes) != bytes.size())
                 throw FileError(
-                    "import_write_failed",
-                    QStringLiteral("音源复制失败，请检查磁盘空间：%1").arg(staging.errorString()));
+                    "import_read_failed",
+                    QCoreApplication::translate("OpenKeys", "Soundfont reading was interrupted. The previous "
+                                                            "soundfont and settings were preserved."));
+            if (staging.write(bytes) != bytes.size())
+                throw FileError("import_write_failed",
+                                QCoreApplication::translate(
+                                    "OpenKeys", "Soundfont copy failed. Check free disk space: %1")
+                                    .arg(staging.errorString()));
             hash.addData(bytes);
             copied += bytes.size();
             if (copied > total)
-                throw FileError("import_source_changed", QStringLiteral("导入期间源文件发生变化，请重试。"));
+                throw FileError("import_source_changed",
+                                QCoreApplication::translate(
+                                    "OpenKeys", "The source file changed during import. Please try again."));
             const int percent = int(copied * 100 / total);
             if (percent != lastProgress) {
                 notify(progress, ImportPhase::Copying, percent);
@@ -109,8 +133,10 @@ ImportedSoundfont importSoundfont(const QString &source, const QString &director
             }
         }
         if (copied != total || !staging.flush())
-            throw FileError("import_copy_failed",
-                            QStringLiteral("音源副本未完整写入，请检查磁盘空间并重试。"));
+            throw FileError(
+                "import_copy_failed",
+                QCoreApplication::translate(
+                    "OpenKeys", "The soundfont copy is incomplete. Check free disk space and try again."));
         input.close();
         const auto idBytes = hash.result().toHex();
         result.info = {QString::fromLatin1(idBytes), QFileInfo(source).completeBaseName(),
@@ -137,8 +163,10 @@ ImportedSoundfont importSoundfont(const QString &source, const QString &director
         } else {
             staging.close();
             if (!staging.rename(result.info.path))
-                throw FileError("import_write_failed",
-                                QStringLiteral("无法保存音源副本：%1").arg(staging.errorString()));
+                throw FileError(
+                    "import_write_failed",
+                    QCoreApplication::translate("OpenKeys", "Could not save the soundfont copy: %1")
+                        .arg(staging.errorString()));
             staging.setAutoRemove(false);
             createdPath = result.info.path;
         }
@@ -146,7 +174,8 @@ ImportedSoundfont importSoundfont(const QString &source, const QString &director
         if (!loaded.font)
             throw FileError(
                 "soundfont_load_failed",
-                QStringLiteral("选中的 SF2 文件无法加载，请检查文件是否完整，或尝试较小的音源。"));
+                QCoreApplication::translate("OpenKeys", "Could not load the selected SF2. Check that the "
+                                                        "file is complete or try a smaller soundfont."));
         result.font = std::move(loaded.font);
         notify(progress, ImportPhase::Loading, 100);
         commitInfo(directory, result.info);
@@ -156,7 +185,9 @@ ImportedSoundfont importSoundfont(const QString &source, const QString &director
         result.errorCode = error.code;
     } catch (const std::exception &error) {
         result.error =
-            QStringLiteral("无法导入音源，请检查剩余内存和磁盘空间。%1").arg(QString::fromUtf8(error.what()));
+            QCoreApplication::translate(
+                "OpenKeys", "Could not import the soundfont. Check available memory and disk space. %1")
+                .arg(QString::fromUtf8(error.what()));
         result.errorCode = "import_failed";
     }
     result.font.reset();

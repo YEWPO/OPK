@@ -1,10 +1,14 @@
+#include "core/language.h"
 #include "core/model.h"
 #include "ui/main_window.h"
 #include <QApplication>
 #include <QCommandLineParser>
+#include <QFont>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <cstdio>
 #include <memory>
@@ -34,8 +38,38 @@ int main(int argc, char **argv) {
     parser.addOption(
         {"inspect", "Validate an EOP/recording and print metadata without initializing audio.", "path"});
     parser.addOption({"soundfont", "Import a local SF2 and save an application copy.", "path"});
+    parser.addOption({"language", "Use system, en or zh_CN for this process only.", "language"});
     parser.addPositionalArgument("song", "Optional EOP or OpenKeys recording to open.");
     parser.process(*app);
+    const auto overrideLanguage = parser.value("language");
+    if (parser.isSet("language") && !piano::Language::valid(overrideLanguage)) {
+        std::fprintf(stderr, "Invalid language; expected system, en or zh_CN.\n");
+        return 2;
+    }
+    const bool diagnostic = parser.isSet("smoke-test") || parser.isSet("screenshot");
+    std::unique_ptr<QTemporaryDir> diagnosticSettings;
+    if (diagnostic && !headless) {
+        diagnosticSettings = std::make_unique<QTemporaryDir>();
+        if (!diagnosticSettings->isValid())
+            return 3;
+        QStandardPaths::setTestModeEnabled(true);
+        QApplication::setStyle("Fusion");
+        QFont previewFont("Noto Sans CJK SC");
+        previewFont.setPixelSize(13);
+        QApplication::setFont(previewFont);
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, diagnosticSettings->path());
+    }
+    QSettings settings("OpenKeys", "Piano");
+    const auto preference =
+        parser.isSet("language")
+            ? overrideLanguage
+            : piano::Language::preference(settings, app->applicationDirPath(), !diagnostic && !headless);
+    piano::Language language;
+    if (!language.load(preference)) {
+        std::fprintf(stderr, "Could not load embedded translations.\n");
+        return 3;
+    }
     if (parser.isSet("inspect")) {
         try {
             const auto song = piano::readSong(parser.value("inspect"));
@@ -53,7 +87,6 @@ int main(int argc, char **argv) {
             return 2;
         }
     }
-    const bool diagnostic = parser.isSet("smoke-test") || parser.isSet("screenshot");
     piano::MainWindow window(diagnostic);
     window.show();
     if (parser.isSet("soundfont"))

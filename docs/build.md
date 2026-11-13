@@ -1,5 +1,7 @@
 # Build and packaging
 
+[简体中文](build.zh-CN.md)
+
 OpenKeys Piano does not download, embed or bundle soundfonts. Every application package includes the offline import guide; the user supplies an SF2 after installation. Building and packaging require no SF2 or network access to an instrument provider.
 
 ## Linux development
@@ -7,7 +9,7 @@ OpenKeys Piano does not download, embed or bundle soundfonts. Every application 
 Ubuntu 24.04 dependencies:
 
 ```sh
-sudo apt-get install cmake ninja-build g++ pkg-config qt6-base-dev libqt6concurrent6 libfluidsynth-dev portaudio19-dev
+sudo apt-get install cmake ninja-build g++ pkg-config qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6concurrent6 libfluidsynth-dev portaudio19-dev
 cmake --preset linux-dev
 cmake --build --preset linux-dev --parallel 4
 ctest --preset linux-dev
@@ -64,7 +66,7 @@ Copies and sampler loading run on a worker thread. Failed/cancelled imports remo
 
 Startup loads only the explicitly imported bank identified by this metadata. There is no bundled/development-directory fallback. Old `QSettings` external paths are migration hints requiring an explicit import. Sample-rate changes reload the managed copy without importing it again.
 
-The import guide is embedded as a Qt resource in the UI library and is also installed as `docs/soundfont.md`. It works without network access, a working directory or the source checkout.
+Both import guides are embedded as Qt resources in the UI library and installed as `docs/soundfont.md` and `docs/soundfont.zh-CN.md`. Their language links also work in the offline viewer. It works without network access, a working directory or the source checkout.
 
 ## Optional soundfont diagnostics
 
@@ -75,6 +77,28 @@ OPENKEYS_TEST_SOUNDFONT=/path/to/piano.sf2 ctest --test-dir build -R '^real_soun
 
 The standalone tool opens no audio device or network connection. It tests 44.1/48 kHz, A0–C8 at three velocities, sustain/release, and an embedded demo; it generates PCM16 WAV previews and a JSON report including the bank's hash and invalid/clipped-sample counters. This does not measure physical output latency or certify third-party sound quality. Unset integration-test input is marked skipped, not passed.
 
-Windows 安装界面统一使用简体中文（产品名和原始许可证正文除外）。快捷方式页独立提供桌面和开始菜单两个选项，默认均启用，不修改 PATH。静默安装可指定 `/DESKTOP=0|1` 和 `/STARTMENU=0|1`，`/D=安装路径` 必须放在最后。升级时沿用现有的卸载旧版本流程；卸载清理安装记录对应的快捷方式，并删除整个安装目录及其内容（包括自行放入的音源、曲谱等文件）；安装目录外的配置和音源不处理。目录被占用或权限不足时卸载返回失败，不显示成功。
+## Installer languages and cleanup
 
-安装模板位于 `cmake/installer/NSIS.template.in`，基于 CMake CPack 模板修改；上游许可证随附为 `CMake-LICENSE.rst`。更换 CMake 版本后需要重新验证模板与 CPack 生成内容兼容。
+The installer and uninstaller support English and Simplified Chinese. Installation starts with a language selector, defaulting to Simplified Chinese on Chinese systems and English otherwise. The selected language is recorded for uninstall and written to `install-language.ini` for the application's first launch. Existing application language preferences, including Follow System, take priority. The uninstaller falls back to the system when upgrading an old installation without a language record.
+
+Silent installation accepts `/LANG=1033` (English) or `/LANG=2052` (Simplified Chinese), `/DESKTOP=0|1` and `/STARTMENU=0|1`. Both shortcut options default to enabled; PATH is never modified. `/D=installation path` must be last. Silent installation shows no language selector. An invalid explicit language returns a failure code.
+
+Upgrade retains uninstall-before-install. Uninstall removes recorded shortcuts and the entire installation directory, including user-added files. Configuration and soundfonts outside that directory are preserved. Locked files or insufficient permissions cause uninstall to fail and retain a retry entry point rather than report success.
+
+`cmake/installer/NSIS.template.in` is adapted from CMake CPack; its upstream license is included as `CMake-LICENSE.rst`. Recheck compatibility after changing CMake versions.
+
+## Translation and preview maintenance
+
+User-visible source strings are English. Simplified Chinese translations live in `translations/openkeys_zh_CN.ts`. Build with Qt LinguistTools; on Ubuntu add `qt6-tools-dev`, `qt6-tools-dev-tools` and `qt6-translations-l10n` to the dependencies above. Windows vcpkg supplies `qttools[linguist]` and `qttranslations`. Application and Qt standard-widget Chinese catalogs are embedded; runtime translation needs no source checkout or network.
+
+To update the catalog, run Qt's `lupdate src -ts translations/openkeys_zh_CN.ts`, review and translate every new entry, then rebuild. Normal builds compile the catalog without rewriting it. `python3 tools/verify_resources.py` checks translation coverage, placeholders, bilingual links, icon dimensions and previews; it requires Python Pillow. CI runs this check in addition to CTest.
+
+Language preference is saved as `ui/language` in the existing `OpenKeys/Piano` settings (`system`, `en`, `zh_CN`). Changing it through Language / 语言 takes effect on restart. `--language system|en|zh_CN` overrides one process without writing the preference. Smoke tests and screenshots isolate their settings.
+
+Regenerate both screenshots from the built application:
+
+```sh
+python3 tools/generate_previews.py --executable /absolute/path/to/openkeys
+```
+
+The script fixes Fusion style, scaling, font size and the initial window state. `docs/preview.png` is English; `docs/preview.zh-CN.png` is Chinese. They are actual application captures, not mockups. Regenerate all PNG and ICO assets from the shared SVG with `python3 tools/generate_icons.py`; the mark uses simple black and white piano keys. Review both screenshots and every icon size before committing.

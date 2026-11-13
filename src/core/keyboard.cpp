@@ -1,4 +1,5 @@
 #include "core/keyboard.h"
+#include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -9,98 +10,99 @@
 namespace piano {
 const std::vector<PhysicalKey> &physicalKeys() {
     static const std::vector<PhysicalKey> keys = [] {
-        std::vector<PhysicalKey> keys = {{1, "Esc", Qt::Key_Escape, 0, 0, 1},
-                                         {59, "F1", Qt::Key_F1, 0, 2, 1},
-                                         {60, "F2", Qt::Key_F2, 0, 3, 1},
-                                         {61, "F3", Qt::Key_F3, 0, 4, 1},
-                                         {62, "F4", Qt::Key_F4, 0, 5, 1},
-                                         {63, "F5", Qt::Key_F5, 0, 6.5, 1},
-                                         {64, "F6", Qt::Key_F6, 0, 7.5, 1},
-                                         {65, "F7", Qt::Key_F7, 0, 8.5, 1},
-                                         {66, "F8", Qt::Key_F8, 0, 9.5, 1},
-                                         {67, "F9", Qt::Key_F9, 0, 11, 1},
-                                         {68, "F10", Qt::Key_F10, 0, 12, 1},
-                                         {87, "F11", Qt::Key_F11, 0, 13, 1},
-                                         {88, "F12", Qt::Key_F12, 0, 14, 1},
-                                         {41, "`", Qt::Key_QuoteLeft, 1, 0, 1},
-                                         {2, "1", Qt::Key_1, 1, 1, 1},
-                                         {3, "2", Qt::Key_2, 1, 2, 1},
-                                         {4, "3", Qt::Key_3, 1, 3, 1},
-                                         {5, "4", Qt::Key_4, 1, 4, 1},
-                                         {6, "5", Qt::Key_5, 1, 5, 1},
-                                         {7, "6", Qt::Key_6, 1, 6, 1},
-                                         {8, "7", Qt::Key_7, 1, 7, 1},
-                                         {9, "8", Qt::Key_8, 1, 8, 1},
-                                         {10, "9", Qt::Key_9, 1, 9, 1},
-                                         {11, "0", Qt::Key_0, 1, 10, 1},
-                                         {12, "−", Qt::Key_Minus, 1, 11, 1},
-                                         {13, "=", Qt::Key_Equal, 1, 12, 1},
-                                         {14, "⌫", Qt::Key_Backspace, 1, 13, 2},
-                                         {15, "Tab", Qt::Key_Tab, 2, 0, 1.5},
-                                         {16, "Q", Qt::Key_Q, 2, 1.5, 1},
-                                         {17, "W", Qt::Key_W, 2, 2.5, 1},
-                                         {18, "E", Qt::Key_E, 2, 3.5, 1},
-                                         {19, "R", Qt::Key_R, 2, 4.5, 1},
-                                         {20, "T", Qt::Key_T, 2, 5.5, 1},
-                                         {21, "Y", Qt::Key_Y, 2, 6.5, 1},
-                                         {22, "U", Qt::Key_U, 2, 7.5, 1},
-                                         {23, "I", Qt::Key_I, 2, 8.5, 1},
-                                         {24, "O", Qt::Key_O, 2, 9.5, 1},
-                                         {25, "P", Qt::Key_P, 2, 10.5, 1},
-                                         {26, "[", Qt::Key_BracketLeft, 2, 11.5, 1},
-                                         {27, "]", Qt::Key_BracketRight, 2, 12.5, 1},
-                                         {43, "\\", Qt::Key_Backslash, 2, 13.5, 1.5},
-                                         {58, "Caps", Qt::Key_CapsLock, 3, 0, 1.8},
-                                         {30, "A", Qt::Key_A, 3, 1.8, 1},
-                                         {31, "S", Qt::Key_S, 3, 2.8, 1},
-                                         {32, "D", Qt::Key_D, 3, 3.8, 1},
-                                         {33, "F", Qt::Key_F, 3, 4.8, 1},
-                                         {34, "G", Qt::Key_G, 3, 5.8, 1},
-                                         {35, "H", Qt::Key_H, 3, 6.8, 1},
-                                         {36, "J", Qt::Key_J, 3, 7.8, 1},
-                                         {37, "K", Qt::Key_K, 3, 8.8, 1},
-                                         {38, "L", Qt::Key_L, 3, 9.8, 1},
-                                         {39, ";", Qt::Key_Semicolon, 3, 10.8, 1},
-                                         {40, "'", Qt::Key_Apostrophe, 3, 11.8, 1},
-                                         {28, "Enter", Qt::Key_Return, 3, 12.8, 2.2},
-                                         {42, "Shift", Qt::Key_Shift, 4, 0, 2.3},
-                                         {44, "Z", Qt::Key_Z, 4, 2.3, 1},
-                                         {45, "X", Qt::Key_X, 4, 3.3, 1},
-                                         {46, "C", Qt::Key_C, 4, 4.3, 1},
-                                         {47, "V", Qt::Key_V, 4, 5.3, 1},
-                                         {48, "B", Qt::Key_B, 4, 6.3, 1},
-                                         {49, "N", Qt::Key_N, 4, 7.3, 1},
-                                         {50, "M", Qt::Key_M, 4, 8.3, 1},
-                                         {51, ",", Qt::Key_Comma, 4, 9.3, 1},
-                                         {52, ".", Qt::Key_Period, 4, 10.3, 1},
-                                         {53, "/", Qt::Key_Slash, 4, 11.3, 1},
-                                         {54, "Shift", Qt::Key_Shift, 4, 12.3, 2.7},
-                                         {29, "Ctrl", Qt::Key_Control, 5, 0, 1.25},
-                                         {0, "Fn", Qt::Key_unknown, 5, 1.25, 1},
-                                         {347, "Win", Qt::Key_Meta, 5, 2.25, 1},
-                                         {56, "Alt", Qt::Key_Alt, 5, 3.25, 1.25},
-                                         {57, "Space · 延音", Qt::Key_Space, 5, 4.5, 6},
-                                         {312, "Alt", Qt::Key_AltGr, 5, 10.5, 1.25},
-                                         {348, "Win", Qt::Key_Super_R, 5, 11.75, 1},
-                                         {349, "菜单", Qt::Key_Menu, 5, 12.75, 1},
-                                         {285, "Ctrl", Qt::Key_Control, 5, 13.75, 1.25},
-                                         {69, "Num", Qt::Key_NumLock, 1, 16, 1},
-                                         {309, "/", Qt::Key_division, 1, 17, 1},
-                                         {55, "*", Qt::Key_multiply, 1, 18, 1},
-                                         {74, "−", Qt::Key_Minus, 1, 19, 1},
-                                         {71, "7", Qt::Key_Home, 2, 16, 1},
-                                         {72, "8", Qt::Key_Up, 2, 17, 1},
-                                         {73, "9", Qt::Key_PageUp, 2, 18, 1},
-                                         {78, "+", Qt::Key_Plus, 2, 19, 1, 2},
-                                         {75, "4", Qt::Key_Left, 3, 16, 1},
-                                         {76, "5", Qt::Key_Clear, 3, 17, 1},
-                                         {77, "6", Qt::Key_Right, 3, 18, 1},
-                                         {79, "1", Qt::Key_End, 4, 16, 1},
-                                         {80, "2", Qt::Key_Down, 4, 17, 1},
-                                         {81, "3", Qt::Key_PageDown, 4, 18, 1},
-                                         {284, "↵", Qt::Key_Enter, 4, 19, 1, 2},
-                                         {82, "0", Qt::Key_Insert, 5, 16, 2},
-                                         {83, ".", Qt::Key_Delete, 5, 18, 1}};
+        std::vector<PhysicalKey> keys = {
+            {1, "Esc", Qt::Key_Escape, 0, 0, 1},
+            {59, "F1", Qt::Key_F1, 0, 2, 1},
+            {60, "F2", Qt::Key_F2, 0, 3, 1},
+            {61, "F3", Qt::Key_F3, 0, 4, 1},
+            {62, "F4", Qt::Key_F4, 0, 5, 1},
+            {63, "F5", Qt::Key_F5, 0, 6.5, 1},
+            {64, "F6", Qt::Key_F6, 0, 7.5, 1},
+            {65, "F7", Qt::Key_F7, 0, 8.5, 1},
+            {66, "F8", Qt::Key_F8, 0, 9.5, 1},
+            {67, "F9", Qt::Key_F9, 0, 11, 1},
+            {68, "F10", Qt::Key_F10, 0, 12, 1},
+            {87, "F11", Qt::Key_F11, 0, 13, 1},
+            {88, "F12", Qt::Key_F12, 0, 14, 1},
+            {41, "`", Qt::Key_QuoteLeft, 1, 0, 1},
+            {2, "1", Qt::Key_1, 1, 1, 1},
+            {3, "2", Qt::Key_2, 1, 2, 1},
+            {4, "3", Qt::Key_3, 1, 3, 1},
+            {5, "4", Qt::Key_4, 1, 4, 1},
+            {6, "5", Qt::Key_5, 1, 5, 1},
+            {7, "6", Qt::Key_6, 1, 6, 1},
+            {8, "7", Qt::Key_7, 1, 7, 1},
+            {9, "8", Qt::Key_8, 1, 8, 1},
+            {10, "9", Qt::Key_9, 1, 9, 1},
+            {11, "0", Qt::Key_0, 1, 10, 1},
+            {12, "−", Qt::Key_Minus, 1, 11, 1},
+            {13, "=", Qt::Key_Equal, 1, 12, 1},
+            {14, "⌫", Qt::Key_Backspace, 1, 13, 2},
+            {15, "Tab", Qt::Key_Tab, 2, 0, 1.5},
+            {16, "Q", Qt::Key_Q, 2, 1.5, 1},
+            {17, "W", Qt::Key_W, 2, 2.5, 1},
+            {18, "E", Qt::Key_E, 2, 3.5, 1},
+            {19, "R", Qt::Key_R, 2, 4.5, 1},
+            {20, "T", Qt::Key_T, 2, 5.5, 1},
+            {21, "Y", Qt::Key_Y, 2, 6.5, 1},
+            {22, "U", Qt::Key_U, 2, 7.5, 1},
+            {23, "I", Qt::Key_I, 2, 8.5, 1},
+            {24, "O", Qt::Key_O, 2, 9.5, 1},
+            {25, "P", Qt::Key_P, 2, 10.5, 1},
+            {26, "[", Qt::Key_BracketLeft, 2, 11.5, 1},
+            {27, "]", Qt::Key_BracketRight, 2, 12.5, 1},
+            {43, "\\", Qt::Key_Backslash, 2, 13.5, 1.5},
+            {58, "Caps", Qt::Key_CapsLock, 3, 0, 1.8},
+            {30, "A", Qt::Key_A, 3, 1.8, 1},
+            {31, "S", Qt::Key_S, 3, 2.8, 1},
+            {32, "D", Qt::Key_D, 3, 3.8, 1},
+            {33, "F", Qt::Key_F, 3, 4.8, 1},
+            {34, "G", Qt::Key_G, 3, 5.8, 1},
+            {35, "H", Qt::Key_H, 3, 6.8, 1},
+            {36, "J", Qt::Key_J, 3, 7.8, 1},
+            {37, "K", Qt::Key_K, 3, 8.8, 1},
+            {38, "L", Qt::Key_L, 3, 9.8, 1},
+            {39, ";", Qt::Key_Semicolon, 3, 10.8, 1},
+            {40, "'", Qt::Key_Apostrophe, 3, 11.8, 1},
+            {28, "Enter", Qt::Key_Return, 3, 12.8, 2.2},
+            {42, "Shift", Qt::Key_Shift, 4, 0, 2.3},
+            {44, "Z", Qt::Key_Z, 4, 2.3, 1},
+            {45, "X", Qt::Key_X, 4, 3.3, 1},
+            {46, "C", Qt::Key_C, 4, 4.3, 1},
+            {47, "V", Qt::Key_V, 4, 5.3, 1},
+            {48, "B", Qt::Key_B, 4, 6.3, 1},
+            {49, "N", Qt::Key_N, 4, 7.3, 1},
+            {50, "M", Qt::Key_M, 4, 8.3, 1},
+            {51, ",", Qt::Key_Comma, 4, 9.3, 1},
+            {52, ".", Qt::Key_Period, 4, 10.3, 1},
+            {53, "/", Qt::Key_Slash, 4, 11.3, 1},
+            {54, "Shift", Qt::Key_Shift, 4, 12.3, 2.7},
+            {29, "Ctrl", Qt::Key_Control, 5, 0, 1.25},
+            {0, "Fn", Qt::Key_unknown, 5, 1.25, 1},
+            {347, "Win", Qt::Key_Meta, 5, 2.25, 1},
+            {56, "Alt", Qt::Key_Alt, 5, 3.25, 1.25},
+            {57, QT_TRANSLATE_NOOP("OpenKeys", "Space · Sustain"), Qt::Key_Space, 5, 4.5, 6},
+            {312, "Alt", Qt::Key_AltGr, 5, 10.5, 1.25},
+            {348, "Win", Qt::Key_Super_R, 5, 11.75, 1},
+            {349, QT_TRANSLATE_NOOP("OpenKeys", "Menu"), Qt::Key_Menu, 5, 12.75, 1},
+            {285, "Ctrl", Qt::Key_Control, 5, 13.75, 1.25},
+            {69, "Num", Qt::Key_NumLock, 1, 16, 1},
+            {309, "/", Qt::Key_division, 1, 17, 1},
+            {55, "*", Qt::Key_multiply, 1, 18, 1},
+            {74, "−", Qt::Key_Minus, 1, 19, 1},
+            {71, "7", Qt::Key_Home, 2, 16, 1},
+            {72, "8", Qt::Key_Up, 2, 17, 1},
+            {73, "9", Qt::Key_PageUp, 2, 18, 1},
+            {78, "+", Qt::Key_Plus, 2, 19, 1, 2},
+            {75, "4", Qt::Key_Left, 3, 16, 1},
+            {76, "5", Qt::Key_Clear, 3, 17, 1},
+            {77, "6", Qt::Key_Right, 3, 18, 1},
+            {79, "1", Qt::Key_End, 4, 16, 1},
+            {80, "2", Qt::Key_Down, 4, 17, 1},
+            {81, "3", Qt::Key_PageDown, 4, 18, 1},
+            {284, "↵", Qt::Key_Enter, 4, 19, 1, 2},
+            {82, "0", Qt::Key_Insert, 5, 16, 2},
+            {83, ".", Qt::Key_Delete, 5, 18, 1}};
         for (auto &k : keys)
             if (k.column >= 16)
                 k.column += 4;
@@ -117,12 +119,13 @@ const std::vector<PhysicalKey> &physicalKeys() {
 }
 QString keyName(uint16_t code) {
     if (code == 347)
-        return QStringLiteral("左 Win");
+        return QCoreApplication::translate("OpenKeys", "Left Win");
     if (code == 348)
-        return QStringLiteral("右 Win");
+        return QCoreApplication::translate("OpenKeys", "Right Win");
     for (const auto &k : physicalKeys())
         if (k.code == code)
-            return (k.column >= 20 ? QStringLiteral("Num ") : QString()) + QString::fromUtf8(k.label);
+            return (k.column >= 20 ? QStringLiteral("Num ") : QString()) +
+                   QCoreApplication::translate("OpenKeys", k.label);
     return QString("0x%1").arg(code, 2, 16, QChar('0'));
 }
 uint16_t scanFromQt(int key, quint32 scan) {
@@ -207,7 +210,7 @@ int jsonInt(const QJsonObject &o, const char *field, int lo, int hi) {
     const auto v = o.value(QLatin1String(field));
     double n = v.toDouble(-9999);
     if (!v.isDouble() || !std::isfinite(n) || n != std::floor(n) || n < lo || n > hi)
-        throw FileError("invalid_keymap", QString("Invalid %1").arg(field));
+        throw FileError("invalid_keymap", QCoreApplication::translate("OpenKeys", "Invalid %1").arg(field));
     return int(n);
 }
 } // namespace
@@ -215,27 +218,29 @@ Keymap Keymap::read(const QString &path) {
     QJsonParseError error;
     auto doc = QJsonDocument::fromJson(readBounded(path), &error);
     if (error.error != QJsonParseError::NoError || !doc.isObject())
-        throw FileError("invalid_keymap", "Expected JSON object");
+        throw FileError("invalid_keymap", QCoreApplication::translate("OpenKeys", "Expected JSON object"));
     auto o = doc.object();
     if (o.value("format") != "openkeys-keymap" || jsonInt(o, "version", 1, 1) != 1)
-        throw FileError("invalid_keymap", "Unknown format/version");
+        throw FileError("invalid_keymap", QCoreApplication::translate("OpenKeys", "Unknown format/version"));
     Keymap map;
     map.transpose = jsonInt(o, "transpose", -12, 12);
     map.octave = {jsonInt(o, "leftOctave", -3, 3), jsonInt(o, "rightOctave", -3, 3)};
     map.velocity = {jsonInt(o, "leftVelocity", 0, 127), jsonInt(o, "rightVelocity", 0, 127)};
     if (!o.value("bindings").isArray() || o.value("bindings").toArray().size() > 511)
-        throw FileError("invalid_keymap", "Invalid bindings");
+        throw FileError("invalid_keymap", QCoreApplication::translate("OpenKeys", "Invalid bindings"));
     for (auto item : o.value("bindings").toArray()) {
         if (!item.isObject())
-            throw FileError("invalid_keymap", "Invalid binding");
+            throw FileError("invalid_keymap", QCoreApplication::translate("OpenKeys", "Invalid binding"));
         auto b = item.toObject();
         const auto key = uint16_t(jsonInt(b, "key", 1, 511));
         if (key == 42 || key == 54)
-            throw FileError("invalid_keymap", "Shift is reserved for velocity modifiers");
+            throw FileError("invalid_keymap", QCoreApplication::translate(
+                                                  "OpenKeys", "Shift is reserved for velocity modifiers"));
         if (map.bindings.contains(key))
-            throw FileError("invalid_keymap", "Duplicate binding");
+            throw FileError("invalid_keymap", QCoreApplication::translate("OpenKeys", "Duplicate binding"));
         if (!b.value("sustain").isBool())
-            throw FileError("invalid_keymap", "Invalid sustain flag");
+            throw FileError("invalid_keymap",
+                            QCoreApplication::translate("OpenKeys", "Invalid sustain flag"));
         map.bindings[key] = {key, jsonInt(b, "note", 0, 127), Hand(jsonInt(b, "hand", 0, 2)),
                              b.value("sustain").toBool()};
     }
