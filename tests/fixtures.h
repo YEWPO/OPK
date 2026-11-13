@@ -83,6 +83,7 @@ inline QByteArray changingKeyEop() {
     u32(b, header + 4, uint32_t(-1));
     u32(b, header + 12, 40);
     u32(b, header + 16, 60);
+    u32(b, record + 8, 1);
     b[oldStart + 4] = 31;
     u16(b, oldStart + 32, 0x190);
     const int start = oldStart + 52;
@@ -105,6 +106,41 @@ inline QByteArray changingKeyEop() {
     event(500, 0x80, 30, 0);
     b.append(QByteArray(16, '\0'));
     u32(b, 0x2c, 9 * 16);
+    return encode(b);
+}
+inline QByteArray twoHandEop(int version = 301, bool zeroSection = false, uint32_t firstHand = 1,
+                             uint32_t secondHand = 0) {
+    const int stride = version == 301 ? 52 : 42;
+    constexpr int header = 0x1bc, record = header + 28;
+    const int sectionSize = 28 + 2 * stride, start = header + sectionSize;
+    // Original synthetic mapping and timing, using the hand field from the local sample.
+    QByteArray b(start, '\0');
+    b.replace(0, 13, "EveryonePiano");
+    u32(b, 0x10, version);
+    u32(b, 0x1b8, zeroSection ? 0 : sectionSize);
+    u32(b, 0x28, 4 + sectionSize);
+    u32(b, 0x2c, 5 * 16);
+    b[record + 4] = 30;
+    u32(b, record + 8, firstHand);
+    u16(b, record + 32, 0x90);
+    u16(b, record + 34, 60);
+    b[record + stride + 4] = 79;
+    u32(b, record + stride + 8, secondHand);
+    u16(b, record + stride + 32, 0x90);
+    u16(b, record + stride + 34, 64);
+    const auto event = [&](double time, int status, int key, int velocity) {
+        QByteArray e(16, '\0');
+        real(e, 0, time);
+        e[8] = char(status);
+        e[9] = char(key);
+        e[10] = char(velocity);
+        b.append(e);
+    };
+    event(0, 0x90, 30, 90);
+    event(100, 0x90, 79, 80);
+    event(200, 0x80, 30, 0);
+    event(500, 0x80, 79, 0);
+    b.append(QByteArray(16, '\0'));
     return encode(b);
 }
 inline QByteArray chunk(const char *id, QByteArray content) {

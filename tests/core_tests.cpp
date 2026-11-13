@@ -257,6 +257,8 @@ class CoreTests : public QObject {
         QCOMPARE(song.events[1].note, 63);
         QCOMPARE(song.events[2].note, 65);
         QCOMPARE(song.events[3].note, 65);
+        for (const auto &event : song.events)
+            QCOMPARE(event.hand, Hand::Left); // Transpose and release retain the mapping's hand.
         QCOMPARE(song.configurations.size(), size_t(3));
         QCOMPARE(song.configurationAt(0)->transpose, 3);
         QCOMPARE(song.configurations[1].transpose, 4);
@@ -305,6 +307,97 @@ class CoreTests : public QObject {
         QCOMPARE(song.events.size(), size_t(2));
         song = parseEop(fixture::encode(fixture::decodedEop(201, true, true)));
         QCOMPARE(song.events.size(), size_t(4));
+    }
+    void eopHandMappings_data() {
+        QTest::addColumn<int>("version");
+        QTest::addColumn<bool>("zeroSection");
+        QTest::addColumn<quint32>("firstFlag");
+        QTest::addColumn<quint32>("secondFlag");
+        QTest::addColumn<int>("firstHand");
+        QTest::addColumn<int>("secondHand");
+        for (int version : {201, 301}) {
+            for (bool zero : {false, true}) {
+                if (version == 301 && zero)
+                    continue;
+                for (quint32 flag : {0u, 1u, 2u, 0xffffffffu}) {
+                    const auto name =
+                        QString("v%1-%2-flag%3").arg(version).arg(zero ? "zero" : "prefixed").arg(flag);
+                    const auto first = flag == 1 ? Hand::Left : flag == 0 ? Hand::Right : Hand::Unknown;
+                    const auto second = flag == 1 ? Hand::Right : Hand::Left;
+                    QTest::newRow(qPrintable(name))
+                        << version << zero << flag << quint32(flag == 1 ? 0 : 1) << int(first) << int(second);
+                }
+            }
+        }
+    }
+    void eopHandMappings() {
+        QFETCH(int, version);
+        QFETCH(bool, zeroSection);
+        QFETCH(quint32, firstFlag);
+        QFETCH(quint32, secondFlag);
+        QFETCH(int, firstHand);
+        QFETCH(int, secondHand);
+        const auto song = parseEop(fixture::twoHandEop(version, zeroSection, firstFlag, secondFlag));
+        QCOMPARE(song.events.size(), size_t(4));
+        QVERIFY(song.warnings.empty());
+        QTemporaryDir directory;
+        const auto path = directory.filePath("hands.eopiano.json");
+        saveRecording(path, song);
+        const auto copy = readSong(path);
+        for (size_t i = 0; i < song.events.size(); ++i) {
+            const auto &event = song.events[i];
+            QCOMPARE(int(event.hand), i % 2 == 0 ? firstHand : secondHand);
+            QCOMPARE(event.note, i % 2 == 0 ? 60 : 64);
+            QCOMPARE(event.key, i % 2 == 0 ? 30 : 79);
+            QCOMPARE(event.kind, i < 2 ? Kind::NoteOn : Kind::NoteOff);
+            QCOMPARE(event.timeUs, (std::array<int64_t, 4>{0, 100000, 200000, 500000})[i]);
+            QCOMPARE(event.velocity, i == 0 ? 90 : i == 1 ? 80 : 0);
+            QCOMPARE(copy.events[i].hand, event.hand);
+        }
+    }
+    void eopLayerHands() {
+        for (int version : {201, 301}) {
+            for (bool zero : {false, true}) {
+                if (version == 301 && zero)
+                    continue;
+                const qsizetype first = 0x1bc + 28;
+                const qsizetype second = first + (version == 301 ? 52 : 42) + 4 + 28;
+                for (bool samePitch : {false, true}) {
+                    for (quint32 secondFlag : {0u, 1u, 2u}) {
+                        auto data = fixture::decodedEop(version, true, zero);
+                        fixture::u32(data, first + 8, 1);
+                        fixture::u32(data, second + 8, secondFlag);
+                        fixture::u16(data, second + 34, samePitch ? 60 : 64);
+                        const auto song = parseEop(fixture::encode(data));
+                        const bool duplicate = samePitch && secondFlag == 1;
+                        QCOMPARE(song.events.size(), duplicate ? size_t(2) : size_t(4));
+                        QCOMPARE(song.events[0].hand, Hand::Left);
+                        QCOMPARE(song.events[0].note, 60);
+                        if (!duplicate) {
+                            QCOMPARE(song.events[1].hand, secondFlag == 0   ? Hand::Right
+                                                          : secondFlag == 1 ? Hand::Left
+                                                                            : Hand::Unknown);
+                            QCOMPARE(song.events[1].note, samePitch ? 60 : 64);
+                        }
+                        const size_t count = song.events.size() / 2;
+                        for (size_t i = 0; i < count; ++i) {
+                            QCOMPARE(song.events[i + count].hand, song.events[i].hand);
+                            QCOMPARE(song.events[i + count].note, song.events[i].note);
+                            QCOMPARE(song.events[i + count].kind, Kind::NoteOff);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    void eopV200RightHand() {
+        auto data = fixture::decodedEop(200);
+        fixture::u32(data, 0x1b8 + 28 + (30 - 1) * 12 + 4, 1);
+        const auto song = parseEop(fixture::encode(data, true));
+        QCOMPARE(song.events.size(), size_t(2));
+        QCOMPARE(song.events[0].hand, Hand::Right);
+        QCOMPARE(song.events[1].hand, Hand::Right);
+        QCOMPARE(song.events[0].velocity, 127);
     }
     void eopMappingOffsets() {
         for (int version : {201, 301}) {

@@ -225,6 +225,90 @@ class UiTests : public QObject {
         window.setSong({});
         QVERIFY(window.view_->playbackKeys.empty());
     }
+    void importedEopHandColors_data() {
+        QTest::addColumn<int>("version");
+        QTest::addColumn<bool>("zeroSection");
+        QTest::addColumn<bool>("swapped");
+        for (int version : {201, 301})
+            for (bool zero : {false, true}) {
+                if (version == 301 && zero)
+                    continue;
+                for (bool swapped : {false, true}) {
+                    const auto name = QString("v%1-%2-%3")
+                                          .arg(version)
+                                          .arg(zero ? "zero" : "prefixed")
+                                          .arg(swapped ? "swapped" : "normal");
+                    QTest::newRow(qPrintable(name)) << version << zero << swapped;
+                }
+            }
+    }
+    void importedEopHandColors() {
+        QFETCH(int, version);
+        QFETCH(bool, zeroSection);
+        QFETCH(bool, swapped);
+        QTemporaryDir directory;
+        const auto path = directory.filePath("hands.eop");
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        const auto bytes = fixture::twoHandEop(version, zeroSection, swapped ? 0 : 1, swapped ? 1 : 0);
+        QCOMPARE(file.write(bytes), qint64(bytes.size()));
+        file.close();
+        MainWindow window(true);
+        window.timer_.stop();
+        window.show();
+        QApplication::processEvents();
+        window.openPath(path);
+        QCOMPARE(window.song_.events.size(), size_t(4));
+        QCOMPARE(window.song_.events[0].hand, swapped ? Hand::Right : Hand::Left);
+        QCOMPARE(window.song_.events[1].hand, swapped ? Hand::Left : Hand::Right);
+        // Deliberately contradict the imported assignments in the current display map.
+        window.view_->map.bindings[30].hand = swapped ? Hand::Left : Hand::Right;
+        window.view_->map.bindings[79].hand = swapped ? Hand::Right : Hand::Left;
+        const QColor firstColor(swapped ? "#b6a0ff" : "#67d9ba");
+        const QColor secondColor(swapped ? "#67d9ba" : "#b6a0ff");
+        const auto firstKey = computerKeyPoint(*window.view_, 30);
+        const auto secondKey = computerKeyPoint(*window.view_, 79);
+        const auto firstNote = pianoPoint(*window.view_, 23.5);
+        const auto secondNote = pianoPoint(*window.view_, 25.5);
+        const auto checkColors = [&](bool first, bool second) {
+            const auto image = window.view_->grab().toImage();
+            const auto pixel = [&](QPoint point) {
+                return image.pixelColor(point * image.devicePixelRatio()).rgba();
+            };
+            QCOMPARE(pixel(firstKey), (first ? firstColor.darker(300) : QColor("#1a2532")).rgba());
+            QCOMPARE(pixel(secondKey), (second ? secondColor.darker(300) : QColor("#1a2532")).rgba());
+            QCOMPARE(pixel(firstNote), (first ? firstColor : QColor("#eef0eb")).rgba());
+            QCOMPARE(pixel(secondNote), (second ? secondColor : QColor("#eef0eb")).rgba());
+        };
+        std::vector<float> block(480 * 2);
+        window.startPlayback();
+        window.audio_.render(block.data(), 480);
+        window.tick();
+        checkColors(true, false);
+        window.seekPlayback(300); // 150 ms: both hands are held.
+        checkColors(true, true);
+        window.seekPlayback(500); // 250 ms: the first hand has released.
+        checkColors(false, true);
+        window.audio_.pause();
+        window.audio_.render(block.data(), 480);
+        window.tick();
+        checkColors(false, false);
+        window.startPlayback();
+        window.audio_.render(block.data(), 480);
+        window.tick();
+        checkColors(false, true);
+        window.seekPlayback(100); // Rewind to 50 ms.
+        checkColors(true, false);
+        window.seekPlayback(1000);
+        checkColors(false, false);
+        window.startPlayback();
+        window.audio_.render(block.data(), 480);
+        window.tick();
+        checkColors(true, false);
+        window.setSong({});
+        window.tick();
+        checkColors(false, false);
+    }
     void englishInterface() {
         QVERIFY(language_.load("en"));
         MainWindow window(true);

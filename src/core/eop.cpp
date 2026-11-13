@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <bit>
 #include <cmath>
+#include <compare>
 #include <deque>
 #include <map>
 #include <set>
@@ -45,9 +46,13 @@ struct Reader {
         return true;
     }
 };
+struct MappedNote {
+    uint8_t pitch;
+    Hand hand;
+    auto operator<=>(const MappedNote &) const = default;
+};
 struct Mapping {
-    std::set<uint8_t> notes;
-    Hand hand = Hand::Unknown;
+    std::set<MappedNote> notes;
     int velocity = -1;
     bool control = false;
     int transposeDelta = 0;
@@ -92,7 +97,11 @@ Map section(const Reader &r, qsizetype begin, qsizetype length, int stride) {
                 throw FileError("corrupt_eop",
                                 QCoreApplication::translate(
                                     "OpenKeys", "EOP mapping offset produces an out-of-range pitch"));
-            map.notes.insert(uint8_t(pitch));
+            // Checked against the supplied v301 sample; v201 uses the same record prefix.
+            const auto hand = r.u32(p + 8);
+            map.notes.insert({uint8_t(pitch), hand == 1   ? Hand::Left
+                                              : hand == 0 ? Hand::Right
+                                                          : Hand::Unknown});
         } else {
             map.control = true;
             // Action identifiers are stored in the mapping, independently of the physical key.
@@ -183,8 +192,7 @@ Song parseEop(const QByteArray &raw) {
                 if (note > 127)
                     throw FileError("corrupt_eop",
                                     QCoreApplication::translate("OpenKeys", "Invalid v200 pitch"));
-                m.notes.insert(uint8_t(note));
-                m.hand = action == 1 ? Hand::Right : Hand::Left;
+                m.notes.insert({uint8_t(note), action == 1 ? Hand::Right : Hand::Left});
                 m.velocity = int(((action == 1 ? right : left) * 127 + 50) / 100);
             } else
                 m.control = true;
@@ -308,19 +316,19 @@ Song parseEop(const QByteArray &raw) {
             continue;
         }
         std::vector<Event> pressed;
-        for (auto pitch : m.notes) {
+        for (const auto &note : m.notes) {
             Event e;
             e.timeUs = int64_t(std::llround(ms * 1000));
             e.kind = status == 0x90 ? Kind::NoteOn : Kind::NoteOff;
             // EOP's one-byte extended Set-1 codes use bit 7; the application
             // represents E0 separately in bit 8 to match Windows Raw Input.
             e.key = key >= 128 ? uint16_t((key & 0x7f) | 0x100) : key;
-            const int shifted = int(pitch) + transposeDelta;
+            const int shifted = int(note.pitch) + transposeDelta;
             if (shifted < 0 || shifted > 127)
                 throw FileError("corrupt_eop", QCoreApplication::translate(
                                                    "OpenKeys", "Transpose produces an out-of-range pitch"));
             e.note = uint8_t(shifted);
-            e.hand = m.hand;
+            e.hand = note.hand;
             e.velocity = uint8_t(e.kind == Kind::NoteOn && m.velocity >= 0 ? m.velocity : velocity);
             if (e.kind == Kind::NoteOn && m.velocity == 0)
                 continue;
