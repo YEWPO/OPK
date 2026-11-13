@@ -68,7 +68,7 @@ ctest --preset windows-release
 
 Building and packaging require no soundfont. Packages contain both offline guides and example performance data, without SF2/SF3 files. See [Build and Packaging](docs/build.md).
 
-The installer enables desktop and Start Menu shortcuts by default; either can be deselected. It does not modify PATH. The application, shortcuts, installer and uninstaller share a full-octave piano icon: eight white keys from C to high C and five black keys in two-plus-three groups. Uninstall removes shortcuts and the entire installation directory, including files placed there by the user; data outside that directory is preserved.
+The installer enables desktop and Start Menu shortcuts by default; either can be deselected. It does not modify PATH. The application, shortcuts, installer and uninstaller share a one-octave piano icon: the OKP wordmark above seven white keys and five black keys in two-plus-three groups. Uninstall removes shortcuts and the entire installation directory, including files placed there by the user; data outside that directory is preserved.
 
 ## Validation and limitations
 

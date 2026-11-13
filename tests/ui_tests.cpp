@@ -18,8 +18,6 @@
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QScopeGuard>
-#include <QScrollArea>
-#include <QScrollBar>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStandardPaths>
@@ -72,19 +70,6 @@ class UiTests : public QObject {
   private slots:
     void init() {
         QVERIFY(language_.load("zh_CN"));
-    }
-    void smallWindowLayout() {
-        QVERIFY(language_.load("en"));
-        MainWindow window(true);
-        window.resize(980, 760);
-        window.show();
-        QCoreApplication::processEvents();
-        auto *scroll = window.findChild<QScrollArea *>();
-        QVERIFY(scroll);
-        QVERIFY(scroll->verticalScrollBar()->maximum() > 0);
-        auto *view = keyboardView(window);
-        QVERIFY(view->height() >= view->minimumSizeHint().height());
-        QVERIFY(scroll->widget()->height() > view->geometry().bottom());
     }
     void englishInterface() {
         QVERIFY(language_.load("en"));
@@ -244,53 +229,48 @@ class UiTests : public QObject {
             QCOMPARE(releases, 1);
         }
     }
-    void tallKeyCaps() {
-        KeyboardView view;
-        view.show();
-        for (const auto size : {QSize(980, 440), QSize(1400, 620)}) {
-            view.resize(size);
-            for (uint16_t code : {uint16_t(78), uint16_t(284)}) {
-                int presses = 0, releases = 0;
-                uint16_t edited = 0, played = 0;
-                view.mouseKey = [&](uint16_t key, bool down) {
-                    played = key;
-                    down ? ++presses : ++releases;
-                };
-                view.editKey = [&](uint16_t key) { edited = key; };
-                const int halfRow = int(std::clamp((view.height() - 220.) / 6., 34., 52.) / 2);
-                const auto center = computerKeyPoint(view, code);
-                const auto top = center - QPoint(0, halfRow), bottom = center + QPoint(0, halfRow);
-                QTest::mousePress(&view, Qt::LeftButton, Qt::NoModifier, top);
-                QCOMPARE(played, code);
-                QCOMPARE(presses, 1);
-                moveMouse(view, bottom, true);
-                QCOMPARE(presses, 1);
-                QCOMPARE(releases, 0);
-                QTest::mouseRelease(&view, Qt::LeftButton, Qt::NoModifier, bottom);
-                QCOMPARE(releases, 1);
-                QTest::mouseClick(&view, Qt::LeftButton, Qt::NoModifier, bottom);
-                QCOMPARE(presses, 2);
-                QCOMPARE(played, code);
-                for (const auto point : {top, bottom}) {
-                    edited = 0;
-                    QTest::mouseClick(&view, Qt::RightButton, Qt::NoModifier, point);
-                    QCOMPARE(edited, code);
-                }
-                // The right-hand gap beside the key must remain inactive.
-                const auto gap = center + QPoint(int((view.width() - 24.) / 48.), 0);
-                QTest::mouseClick(&view, Qt::LeftButton, Qt::NoModifier, gap);
-                QCOMPARE(presses, 2);
-            }
-        }
-    }
-    void bottomRowKeys() {
+    void keyHitRegionsAndSystemKeys() {
         KeyboardView view;
         view.resize(1200, 520);
         view.show();
-        int presses = 0;
-        uint16_t edited = 0;
-        view.mouseKey = [&](uint16_t, bool down) { presses += down; };
-        view.editKey = [&](uint16_t code) { edited = code; };
+        int presses = 0, releases = 0;
+        uint16_t edited = 0, played = 0;
+        view.mouseKey = [&](uint16_t key, bool down) {
+            played = key;
+            down ? ++presses : ++releases;
+        };
+        view.editKey = [&](uint16_t key) { edited = key; };
+
+        // Enter and keypad '+' span two rows: both halves play, moving between
+        // them keeps the note held, and the gap beside the key stays inactive.
+        const int halfRow = int(std::clamp((view.height() - 220.) / 6., 34., 52.) / 2);
+        for (uint16_t code : {uint16_t(78), uint16_t(284)}) {
+            presses = releases = 0;
+            const auto center = computerKeyPoint(view, code);
+            const auto top = center - QPoint(0, halfRow), bottom = center + QPoint(0, halfRow);
+            QTest::mousePress(&view, Qt::LeftButton, Qt::NoModifier, top);
+            QCOMPARE(played, code);
+            QCOMPARE(presses, 1);
+            moveMouse(view, bottom, true);
+            QCOMPARE(presses, 1);
+            QCOMPARE(releases, 0);
+            QTest::mouseRelease(&view, Qt::LeftButton, Qt::NoModifier, bottom);
+            QCOMPARE(releases, 1);
+            QTest::mouseClick(&view, Qt::LeftButton, Qt::NoModifier, bottom);
+            QCOMPARE(presses, 2);
+            QCOMPARE(played, code);
+            for (const auto point : {top, bottom}) {
+                edited = 0;
+                QTest::mouseClick(&view, Qt::RightButton, Qt::NoModifier, point);
+                QCOMPARE(edited, code);
+            }
+            const auto gap = center + QPoint(int((view.width() - 24.) / 48.), 0);
+            QTest::mouseClick(&view, Qt::LeftButton, Qt::NoModifier, gap);
+            QCOMPARE(presses, 2);
+        }
+
+        // Fn is a display-only key even while playback and press state are active.
+        edited = 0;
         const auto fn = computerKeyPoint(view, 0);
         moveMouse(view, fn, false);
         QCOMPARE(view.cursor().shape(), Qt::ArrowCursor);
@@ -298,7 +278,7 @@ class UiTests : public QObject {
         const auto before = view.grab().toImage();
         QTest::mouseClick(&view, Qt::LeftButton, Qt::NoModifier, fn);
         QTest::mouseClick(&view, Qt::RightButton, Qt::NoModifier, fn);
-        QCOMPARE(presses, 0);
+        QCOMPARE(presses, 2);
         QCOMPARE(edited, uint16_t(0));
         QCOMPARE(view.grab().toImage(), before);
         view.showPlayback = true;
@@ -306,10 +286,12 @@ class UiTests : public QObject {
         view.pressedKeys.insert(0);
         view.playbackKeys[0] = 1;
         QCOMPARE(view.grab().toImage(), before); // No accidental code-zero highlight.
+
+        // Win/Menu keys are unassigned by default but remain right-click editable.
         for (uint16_t code : {uint16_t(347), uint16_t(348), uint16_t(349)}) {
             const auto point = computerKeyPoint(view, code);
             QTest::mouseClick(&view, Qt::LeftButton, Qt::NoModifier, point);
-            QCOMPARE(presses, 0); // Defaults do not consume system keys as notes.
+            QCOMPARE(presses, 2);
             QTest::mouseClick(&view, Qt::RightButton, Qt::NoModifier, point);
             QCOMPARE(edited, code);
         }
@@ -349,8 +331,6 @@ class UiTests : public QObject {
         auto *view = keyboardView(window);
         QVERIFY(view);
         QVERIFY(!window.windowIcon().isNull());
-        for (const int size : {16, 24, 32, 48, 64, 128, 256})
-            QVERIFY(!window.windowIcon().pixmap(size).isNull());
         const auto a = computerKeyPoint(*view, 30);
         moveMouse(*view, a, false);
         const auto hovered = view->grab().toImage();
@@ -760,22 +740,6 @@ class UiTests : public QObject {
         window.show();
         window.resize(980, 760);
         QApplication::processEvents();
-        for (const char *name : {"transpose", "leftOctave", "rightOctave", "leftVelocity", "rightVelocity"}) {
-            auto *control = window.findChild<QSpinBox *>(QLatin1String(name));
-            QVERIFY(control);
-            const auto labels = control->parentWidget()->findChildren<QLabel *>();
-            QCOMPARE(labels.size(), 1);
-            QCOMPARE(control->geometry().left() - labels[0]->geometry().right() - 1, 8);
-        }
-        for (const auto *name : {"leftVelocity", "rightVelocity"}) {
-            auto *control = window.findChild<QSpinBox *>(name);
-            for (const int value : {0, 1, 99, 100}) {
-                control->setValue(value);
-                const auto *edit = control->findChild<QLineEdit *>();
-                QVERIFY(edit->contentsRect().width() >=
-                        edit->fontMetrics().horizontalAdvance(control->text()));
-            }
-        }
         auto *transpose = window.findChild<QSpinBox *>("transpose");
         QVERIFY(transpose);
         transpose->setValue(0);

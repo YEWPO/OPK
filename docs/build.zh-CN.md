@@ -48,7 +48,7 @@ CI 在一次性 Windows 机器执行 `tools/verify_windows_installer.ps1`，覆�
 
 ## 应用图标
 
-`assets/icons/openkeys.svg` 是唯一可编辑源：深色圆角底上展示 C 到高音 C 的完整八度，包含 8 个修长白键和按“2＋3”分组的 5 个黑键。黑键长度约为白键的 60%，不加字母或装饰条。7 个尺寸的 PNG 及多分辨率 `openkeys.ico` 已纳入仓库，普通构建无需图像转换工具。Qt 嵌入 PNG，Windows 程序、快捷方式及安装/卸载程序使用 ICO。
+`assets/icons/openkeys.svg` 是唯一可编辑源：深色圆角底上，OKP 字标位于单八度琴键上方，包含 7 个白键和按“2＋3”分组的 5 个黑键。黑键长度约为白键的 60%。字标使用 DejaVu Sans Bold，并以 Liberation Sans、Arial 作为回退；重新生成前安装其中一种字体，以保证导出结果一致。7 个尺寸的 PNG 及多分辨率 `openkeys.ico` 已纳入仓库，普通构建无需图像转换工具。Qt 嵌入 PNG，Windows 程序、快捷方式及安装/卸载程序使用 ICO。
 
 修改 SVG 后，安装 librsvg 的 `rsvg-convert` 和 Python Pillow，再运行：
 
@@ -56,7 +56,7 @@ CI 在一次性 Windows 机器执行 `tools/verify_windows_installer.ps1`，覆�
 python3 tools/generate_icons.py
 ```
 
-导出尺寸为 16、24、32、48、64、128 和 256 像素，均需与 SVG 同步。资源检查验证琴键数量和位置、透明圆角、各尺寸黑键的可辨认性及 ICO 与 PNG 像素一致性。
+导出尺寸为 16、24、32、48、64、128 和 256 像素，均需与 SVG 同步。资源检查验证琴键数量与“2＋3”位置、OKP 字标、透明圆角、各尺寸黑键的可辨认性及 ICO 与 PNG 像素一致性。
 
 ## 音源应用副本
 
@@ -101,4 +101,4 @@ OPENKEYS_TEST_SOUNDFONT=/path/to/piano.sf2 ctest --test-dir build -R '^real_soun
 python3 tools/generate_previews.py --executable /absolute/path/to/openkeys
 ```
 
-脚本固定 Fusion 样式、缩放、字体大小和初始窗口状态。`docs/preview.png` 为英文，`docs/preview.zh-CN.png` 为中文，均为真实截图。提交前检查双语截图、所有尺寸图标与 SVG 的一致性。
+脚本固定 Fusion 样式、缩放、字体大小和初始窗口状态。`docs/preview.png` 为英文，`docs/preview.zh-CN.png` 为中文，均为真实截图。使用 `python3 tools/generate_icons.py` 从共享 SVG 重新生成全部 PNG 和 ICO；图标由 OKP 字标与深色圆角底上的象牙白琴键组成。提交前检查双语截图、所有尺寸图标与 SVG 的一致性。

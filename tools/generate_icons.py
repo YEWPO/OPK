@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Export the editable application mark. Requires rsvg-convert and Pillow.
+"""Export the editable application mark. Requires rsvg-convert and Pillow, plus
+DejaVu Sans Bold for the OKP wordmark (Liberation Sans or Arial are fallbacks).
 
 These are asset-authoring tools only; generated PNG/ICO files are checked in.
 Run: python3 tools/generate_icons.py

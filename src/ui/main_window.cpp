@@ -12,12 +12,10 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
-#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
-#include <QGridLayout>
 #include <QGroupBox>
 #include <QIcon>
 #include <QKeyEvent>

@@ -17,7 +17,7 @@ The suite covers:
 - Audio-clock play/pause/resume/stop/restart and speed changes, queue overflow, actual FluidSynth loading/rendering with a generated SF2, panic and volume.
 - System-language fallback, saved preferences, installation-language initialization and user preference precedence, process-only language overrides, embedded translations, bilingual UI and offline guide links.
 - GUI import/error preservation, text-field typing isolation, emergency shortcut and startup without an audio device.
-- Mouse playing on both keyboard regions: drag switching, black-key hit priority, releases outside the widget, focus/hide/grab cancellation, right-click editing, silent visual feedback and embedded icon sizes. Physical/mouse source merging covers notes, sustain and velocity modifiers, both press/release orders, repeat suppression and paired recording events across transposition changes.
+- Mouse playing on both keyboard regions: drag switching, black-key hit priority, releases outside the widget, focus/hide/grab cancellation, right-click editing, silent visual feedback and an embedded window icon. Physical/mouse source merging covers notes, sustain and velocity modifiers, both press/release orders, repeat suppression and paired recording events across transposition changes.
 - Managed SF2 copies: Unicode paths, persistence, duplicate imports, source deletion, replacement cleanup, invalid files, cancellation, write/configuration failure and malformed metadata recovery.
 - First-use guidance and the embedded offline tutorial, GUI import failure preservation, restart loading and explicit migration from legacy external paths.
 - Headless full-range/velocity sampler checks and PCM16 WAV output using generated fixtures. An optional `real_soundfont` integration test accepts `OPENKEYS_TEST_SOUNDFONT`; without a user-supplied bank it is explicitly skipped.
@@ -57,4 +57,4 @@ Target Windows 11 x64 and Windows 10 22H2 x64. Record OS build, CPU, RAM, soundf
 | No-bank install / import / restart / Chinese paths / DPI | |
 | Installer / uninstaller languages / saved preferences / offline language links | |
 
-Resource checks validate English-default documents, matching Chinese pages, language navigation, relative links, image references, translation coverage and placeholders, icon dimensions and both previews. Screenshots are captured from the current application without a soundfont or audio hardware.
+Resource checks validate English-default documents, matching Chinese pages, language navigation, relative links, image references, translation coverage and placeholders, icon dimensions and wordmark rendering, and both previews. Screenshots are captured from the current application without a soundfont or audio hardware.

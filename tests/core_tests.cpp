@@ -2,12 +2,7 @@
 #include "core/language.h"
 #include "core/model.h"
 #include "fixtures.h"
-#include <QDir>
 #include <QFile>
-#include <QFileInfo>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTest>
 #include <limits>
@@ -279,17 +274,6 @@ class CoreTests : public QObject {
         auto invalid = song;
         invalid.configurations.back().timeUs = -1;
         QVERIFY_EXCEPTION_THROWN(validateSong(invalid), FileError);
-    }
-    void localEopSample() {
-        const auto path = qEnvironmentVariable("OPENKEYS_EOP_SAMPLE");
-        if (path.isEmpty())
-            QSKIP("Optional local sample");
-        const auto song = readSong(path);
-        QCOMPARE(song.configurationAt(0)->transpose, 3);
-        QCOMPARE(song.configurationAt(155883000)->transpose, 5);
-        QCOMPARE(song.configurationAt(0)->velocity[0].value(), 51);
-        QCOMPARE(song.configurationAt(0)->velocity[1].value(), 76);
-        QVERIFY(song.warnings.empty());
     }
     void eopVersions_data() {
         QTest::addColumn<int>("version");

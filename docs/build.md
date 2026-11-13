@@ -50,13 +50,13 @@ The NSIS install-options page defaults to creating the **OpenKeys Piano** deskto
 
 ### Application icon assets
 
-`assets/icons/openkeys.svg` is the editable icon source: a full octave from C to high C, with eight slender white keys and five black keys in two-plus-three groups on a dark rounded background. Black keys are about 60% of the white-key length, with no lettering or decorative bars. Its PNG exports and multi-resolution `openkeys.ico` are checked in, so ordinary builds need no image conversion tools. Qt embeds the PNG sizes; the Windows executable resource, shortcuts and NSIS installer/uninstaller use the ICO. To regenerate after editing the SVG, install `rsvg-convert` (librsvg) and Python Pillow, then run:
+`assets/icons/openkeys.svg` is the editable icon source: the OKP wordmark above one octave of seven white keys and five black keys in two-plus-three groups on a dark rounded background. Black keys are about 60% of the white-key length. The wordmark uses DejaVu Sans Bold with Liberation Sans and Arial fallbacks, so install one of those fonts before regenerating to keep exports consistent. Its PNG exports and multi-resolution `openkeys.ico` are checked in, so ordinary builds need no image conversion tools. Qt embeds the PNG sizes; the Windows executable resource, shortcuts and NSIS installer/uninstaller use the ICO. To regenerate after editing the SVG, install `rsvg-convert` (librsvg) and Python Pillow, then run:
 
 ```sh
 python3 tools/generate_icons.py
 ```
 
-The exported sizes are 16, 24, 32, 48, 64, 128 and 256 pixels. Keep every export synchronized with the SVG. Resource verification checks key counts and placement, transparent corners, distinguishable black keys at every size, and matching ICO/PNG pixels.
+The exported sizes are 16, 24, 32, 48, 64, 128 and 256 pixels. Keep every export synchronized with the SVG. Resource verification checks key counts and two-plus-three placement, the OKP wordmark, transparent corners, distinguishable black keys at every size, and matching ICO/PNG pixels.
 
 ## Imported instrument storage
 
@@ -101,4 +101,4 @@ Regenerate both screenshots from the built application:
 python3 tools/generate_previews.py --executable /absolute/path/to/openkeys
 ```
 
-The script fixes Fusion style, scaling, font size and the initial window state. `docs/preview.png` is English; `docs/preview.zh-CN.png` is Chinese. They are actual application captures, not mockups. Regenerate all PNG and ICO assets from the shared SVG with `python3 tools/generate_icons.py`; the mark uses simple black and white piano keys. Review both screenshots and every icon size before committing.
+The script fixes Fusion style, scaling, font size and the initial window state. `docs/preview.png` is English; `docs/preview.zh-CN.png` is Chinese. They are actual application captures, not mockups. Regenerate all PNG and ICO assets from the shared SVG with `python3 tools/generate_icons.py`; the mark combines the OKP wordmark with ivory piano keys on a dark rounded square. Review both screenshots and every icon size before committing.
