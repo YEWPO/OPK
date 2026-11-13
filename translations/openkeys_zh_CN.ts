@@ -50,8 +50,8 @@
     </message>
     <message>
         <location filename="../src/ui/keyboard_view.cpp" line="42"/>
-        <source>Computer keyboard · Click or drag to play · Right-click to edit   |   Left: green · Right: purple · Playback: gold</source>
-        <translation>电脑键盘  /  左键点击或拖动演奏 · 右键编辑          左手 · 绿色     右手 · 紫色     回放 · 金色</translation>
+        <source>Computer keyboard · Click or drag to play · Right-click to edit   |   Left: green · Right: purple · Unknown: gold</source>
+        <translation>电脑键盘  /  左键点击或拖动演奏 · 右键编辑          左手 · 绿色     右手 · 紫色     手别未知 · 金色</translation>
     </message>
     <message>
         <location filename="../src/ui/keyboard_view.cpp" line="72"/>

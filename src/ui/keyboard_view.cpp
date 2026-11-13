@@ -11,10 +11,21 @@ bool black(int note) {
     const int n = note % 12;
     return n == 1 || n == 3 || n == 6 || n == 8 || n == 10;
 }
+QColor handColor(size_t hand) {
+    return hand == 0 ? left : hand == 1 ? right : play;
+}
+QColor keyColor(const std::map<uint16_t, std::array<int, 3>> &keys, uint16_t code) {
+    const auto it = keys.find(code);
+    if (it != keys.end())
+        for (size_t hand = 0; hand < it->second.size(); ++hand)
+            if (it->second[hand] > 0)
+                return handColor(hand);
+    return {};
+}
 QColor noteColor(const std::array<std::array<int, 128>, 3> &notes, int n) {
     for (int h = 0; h < 3; ++h)
         if (notes[size_t(h)][size_t(n)] > 0)
-            return h == 0 ? left : h == 1 ? right : play;
+            return handColor(size_t(h));
     return {};
 }
 } // namespace
@@ -37,10 +48,10 @@ void KeyboardView::paintEvent(QPaintEvent *) {
     p.fillRect(rect(), QColor("#111923"));
     p.setPen(muted);
     p.setFont(QFont("sans-serif", 9));
-    p.drawText(
-        QRectF(16, 7, width() - 32, 20),
-        QCoreApplication::translate("OpenKeys", "Computer keyboard · Click or drag to play · Right-click to "
-                                                "edit   |   Left: green · Right: purple · Playback: gold"));
+    p.drawText(QRectF(16, 7, width() - 32, 20),
+               QCoreApplication::translate("OpenKeys",
+                                           "Computer keyboard · Click or drag to play · Right-click to "
+                                           "edit   |   Left: green · Right: purple · Unknown: gold"));
     for (const auto &key : physicalKeys()) {
         const auto r = keyRect(key);
         const auto it = map.bindings.find(key.code);
@@ -51,13 +62,15 @@ void KeyboardView::paintEvent(QPaintEvent *) {
         QColor accent = muted;
         if (it != map.bindings.end())
             accent = it->second.hand == Hand::Left ? left : it->second.hand == Hand::Right ? right : muted;
-        p.setPen(QPen(live      ? accent
-                      : playing ? play
-                      : hover   ? accent
-                                : QColor("#32404e"),
-                      live || playing || hover ? 2 : 1));
+        const auto activeColor = live      ? keyColor(liveKeys, key.code)
+                                 : playing ? keyColor(playbackKeys, key.code)
+                                           : QColor();
+        if (activeColor.isValid())
+            accent = activeColor;
+        p.setPen(
+            QPen(live || playing || hover ? accent : QColor("#32404e"), live || playing || hover ? 2 : 1));
         p.setBrush(live      ? accent.darker(220)
-                   : playing ? play.darker(300)
+                   : playing ? accent.darker(300)
                    : hover   ? QColor("#283b50")
                              : QColor("#1a2532"));
         p.drawRoundedRect(r, 5, 5);

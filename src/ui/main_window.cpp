@@ -220,9 +220,10 @@ void applyVisual(KeyboardView *view, const Event &e, bool playback) {
     auto &n = notes[size_t(e.hand)][size_t(e.note)];
     n = std::max(0, n + delta);
     if (e.key) {
-        auto &k = keys[e.key];
-        k = std::max(0, k + delta);
-        if (!k)
+        auto &counts = keys[e.key];
+        auto &count = counts[size_t(e.hand)];
+        count = std::max(0, count + delta);
+        if (std::none_of(counts.begin(), counts.end(), [](int n) { return n > 0; }))
             keys.erase(e.key);
     }
 }
@@ -377,6 +378,22 @@ void MainWindow::buildUi() {
         QPushButton#record[active="true"] {background:#843d4b;border-color:#df8793;}
         QSpinBox,QDoubleSpinBox,QComboBox {background:#101824;border:1px solid #354761;border-radius:4px;padding:5px;}
         QComboBox QAbstractItemView {background:#1a2532;selection-background-color:#354761;}
+        QFileDialog QAbstractItemView,QFileDialog QLineEdit,QFileDialog QComboBox {
+            background:#101824;color:#e6edf5;alternate-background-color:#1a2532;
+            selection-background-color:#354761;selection-color:#e6edf5;
+        }
+        QFileDialog QAbstractItemView::item:selected {background:#354761;color:#e6edf5;}
+        QFileDialog QLineEdit {border:1px solid #354761;border-radius:4px;padding:5px;}
+        QFileDialog QHeaderView,QFileDialog QHeaderView::section,QFileDialog QAbstractScrollArea::corner {
+            background:#1a2532;color:#e6edf5;border:0;
+        }
+        QFileDialog QToolButton {background:#213045;color:#e6edf5;border:1px solid #354761;padding:4px;}
+        QFileDialog QToolButton:hover {background:#2e425d;}
+        QFileDialog QMenu {background:#101824;color:#e6edf5;}
+        QFileDialog QMenu::item:selected {background:#354761;color:#e6edf5;}
+        QFileDialog QLineEdit:disabled,QFileDialog QComboBox:disabled,QFileDialog QToolButton:disabled {
+            color:#8493a8;
+        }
         QCheckBox {spacing:8px;}
         QProgressBar {border:0;background:#263449;border-radius:3px;max-height:6px;}
         QProgressBar::chunk {background:#83dfc1;border-radius:3px;}

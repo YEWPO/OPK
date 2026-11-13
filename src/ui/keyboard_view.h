@@ -8,7 +8,7 @@ class KeyboardView : public QWidget {
   public:
     explicit KeyboardView(QWidget *parent = nullptr);
     Keymap map = Keymap::defaults();
-    std::map<uint16_t, int> liveKeys, playbackKeys;
+    std::map<uint16_t, std::array<int, 3>> liveKeys, playbackKeys;
     std::set<uint16_t> pressedKeys;
     std::array<std::array<int, 128>, 3> liveNotes{}, playbackNotes{};
     bool showPlayback = false;

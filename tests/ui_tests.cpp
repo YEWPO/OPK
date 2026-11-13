@@ -3,6 +3,7 @@
 #include "platform/input.h"
 #include "ui/keyboard_view.h"
 #include "ui/main_window.h"
+#include <QAbstractItemView>
 #include <QApplication>
 #include <QClipboard>
 #include <QComboBox>
@@ -11,6 +12,7 @@
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QFile>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QLabel>
 #include <QLineEdit>
@@ -30,8 +32,20 @@
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <algorithm>
+#include <cmath>
 using namespace piano;
 namespace {
+double contrastRatio(const QColor &a, const QColor &b) {
+    const auto luminance = [](const QColor &color) {
+        const auto linear = [](double c) {
+            return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * linear(color.redF()) + 0.7152 * linear(color.greenF()) +
+               0.0722 * linear(color.blueF());
+    };
+    const auto x = luminance(a), y = luminance(b);
+    return (std::max(x, y) + 0.05) / (std::min(x, y) + 0.05);
+}
 void clickStep(QAbstractSpinBox *control, bool up) {
     QStyleOptionSpinBox option;
     option.initFrom(control);
@@ -70,6 +84,146 @@ class UiTests : public QObject {
   private slots:
     void init() {
         QVERIFY(language_.load("zh_CN"));
+    }
+    void darkFileDialogs_data() {
+        QTest::addColumn<QString>("language");
+        QTest::addColumn<bool>("save");
+        QTest::newRow("open-en") << QString("en") << false;
+        QTest::newRow("open-zh") << QString("zh_CN") << false;
+        QTest::newRow("save-en") << QString("en") << true;
+        QTest::newRow("save-zh") << QString("zh_CN") << true;
+    }
+    void darkFileDialogs() {
+        QFETCH(QString, language);
+        QFETCH(bool, save);
+        QVERIFY(language_.load(language));
+        MainWindow window(true);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFileDialog dialog(&window, "", directory.path());
+        dialog.setOption(QFileDialog::DontUseNativeDialog);
+        dialog.setAcceptMode(save ? QFileDialog::AcceptSave : QFileDialog::AcceptOpen);
+        dialog.setNameFilter("Performances (*.eop *.eopiano.json)");
+        dialog.show();
+        QApplication::processEvents();
+        for (const auto *name : {"listView", "treeView", "sidebar"}) {
+            const auto *view = dialog.findChild<QAbstractItemView *>(name);
+            QVERIFY(view);
+            const auto palette = view->viewport()->palette();
+            QVERIFY(palette.color(QPalette::Base).lightnessF() < 0.2);
+            QVERIFY(contrastRatio(palette.color(QPalette::Text), palette.color(QPalette::Base)) >= 4.5);
+            for (const auto group : {QPalette::Active, QPalette::Inactive})
+                QVERIFY(contrastRatio(palette.color(group, QPalette::HighlightedText),
+                                      palette.color(group, QPalette::Highlight)) >= 4.5);
+        }
+        const auto *filename = dialog.findChild<QLineEdit *>("fileNameEdit");
+        QVERIFY(filename);
+        QVERIFY(filename->palette().color(QPalette::Base).lightnessF() < 0.2);
+        QVERIFY(contrastRatio(filename->palette().color(QPalette::Text),
+                              filename->palette().color(QPalette::Base)) >= 4.5);
+        const auto *filter = dialog.findChild<QComboBox *>("fileTypeCombo");
+        QVERIFY(filter);
+        QVERIFY(filter->palette().color(QPalette::Base).lightnessF() < 0.2);
+        QVERIFY(contrastRatio(filter->palette().color(QPalette::Text),
+                              filter->palette().color(QPalette::Base)) >= 4.5);
+        dialog.reject();
+        QCOMPARE(dialog.result(), int(QDialog::Rejected));
+    }
+    void playbackHandColors_data() {
+        QTest::addColumn<int>("hand");
+        QTest::addColumn<QColor>("color");
+        QTest::newRow("left") << int(Hand::Left) << QColor("#67d9ba");
+        QTest::newRow("right") << int(Hand::Right) << QColor("#b6a0ff");
+        QTest::newRow("unknown") << int(Hand::Unknown) << QColor("#ffc875");
+    }
+    void playbackHandColors() {
+        QFETCH(int, hand);
+        QFETCH(QColor, color);
+        KeyboardView view;
+        view.resize(1100, 500);
+        view.show();
+        // The file's hand must win over the user's current binding.
+        view.map.bindings[30].hand = hand == int(Hand::Left) ? Hand::Right : Hand::Left;
+        view.showPlayback = true;
+        view.playbackKeys[30][size_t(hand)] = 1;
+        view.playbackNotes[size_t(hand)][60] = 1;
+        view.playbackNotes[size_t(hand)][61] = 1;
+        const auto key = computerKeyPoint(view, 30);
+        const auto white = pianoPoint(view, 23.5), black = pianoPoint(view, 24, true);
+        auto image = view.grab().toImage();
+        QCOMPARE(image.pixelColor(key).rgba(), color.darker(300).rgba());
+        QCOMPARE(image.pixelColor(white), color);
+        QCOMPARE(image.pixelColor(black), color);
+        view.showPlayback = false;
+        image = view.grab().toImage();
+        QCOMPARE(image.pixelColor(key), QColor("#1a2532"));
+        QCOMPARE(image.pixelColor(white), QColor("#eef0eb"));
+        QCOMPARE(image.pixelColor(black), QColor("#18212c"));
+        view.showPlayback = true;
+        // A live performance keeps its display priority over playback.
+        const auto liveHand = hand == int(Hand::Left) ? Hand::Right : Hand::Left;
+        const QColor liveColor(liveHand == Hand::Left ? "#67d9ba" : "#b6a0ff");
+        view.liveKeys[30][size_t(liveHand)] = 1;
+        view.liveNotes[size_t(liveHand)][60] = 1;
+        image = view.grab().toImage();
+        QCOMPARE(image.pixelColor(key).rgba(), liveColor.darker(220).rgba());
+        QCOMPARE(image.pixelColor(white), liveColor);
+    }
+    void playbackHandCountsAndSeeking() {
+        MainWindow window(true);
+        window.timer_.stop();
+        window.show();
+        QApplication::processEvents();
+        Song song;
+        song.events = {{0, Kind::NoteOn, 60, 80, Hand::Left, 30},
+                       {0, Kind::NoteOn, 61, 80, Hand::Left, 30},
+                       {0, Kind::NoteOn, 64, 80, Hand::Right, 30},
+                       {0, Kind::NoteOn, 67, 80, Hand::Unknown, 30},
+                       {0, Kind::NoteOn, 72, 80, Hand::Right, 0},
+                       {50000, Kind::NoteOff, 61, 0, Hand::Left, 30},
+                       {100000, Kind::NoteOff, 60, 0, Hand::Left, 30},
+                       {200000, Kind::NoteOff, 64, 0, Hand::Right, 30},
+                       {300000, Kind::NoteOff, 67, 0, Hand::Unknown, 30},
+                       {500000, Kind::NoteOff, 72, 0, Hand::Right, 0}};
+        validateSong(song);
+        window.setSong(song);
+        window.startPlayback();
+        std::vector<float> block(480 * 2);
+        window.audio_.render(block.data(), 480);
+        window.tick();
+        const auto key = computerKeyPoint(*window.view_, 30);
+        const auto keyColor = [&] { return window.view_->grab().toImage().pixelColor(key).rgba(); };
+        QCOMPARE(window.view_->playbackKeys.at(30), (std::array<int, 3>{2, 1, 1}));
+        QCOMPARE(keyColor(), QColor("#67d9ba").darker(300).rgba());
+        QVERIFY(!window.view_->playbackKeys.contains(0));
+        QCOMPARE(window.view_->playbackNotes[1][72], 1);
+        window.seekPlayback(120); // 60 ms: one left-hand note is still held.
+        QCOMPARE(window.view_->playbackKeys.at(30), (std::array<int, 3>{1, 1, 1}));
+        QCOMPARE(keyColor(), QColor("#67d9ba").darker(300).rgba());
+        window.seekPlayback(220); // 110 ms: only right and unknown remain.
+        QCOMPARE(window.view_->playbackKeys.at(30), (std::array<int, 3>{0, 1, 1}));
+        QCOMPARE(keyColor(), QColor("#b6a0ff").darker(300).rgba());
+        window.seekPlayback(420);
+        QCOMPARE(window.view_->playbackKeys.at(30), (std::array<int, 3>{0, 0, 1}));
+        QCOMPARE(keyColor(), QColor("#ffc875").darker(300).rgba());
+        window.seekPlayback(620);
+        QVERIFY(window.view_->playbackKeys.empty());
+        QCOMPARE(keyColor(), QColor("#1a2532").rgba());
+        window.seekPlayback(0); // Rebuild the original hand counts after rewinding.
+        QCOMPARE(window.view_->playbackKeys.at(30), (std::array<int, 3>{2, 1, 1}));
+        QCOMPARE(keyColor(), QColor("#67d9ba").darker(300).rgba());
+        window.seekPlayback(1000);
+        window.startPlayback();
+        window.audio_.render(block.data(), 480);
+        window.tick();
+        QCOMPARE(window.view_->playbackKeys.at(30), (std::array<int, 3>{2, 1, 1}));
+        QCOMPARE(keyColor(), QColor("#67d9ba").darker(300).rgba());
+        window.audio_.stop();
+        window.audio_.render(block.data(), 480);
+        window.tick();
+        QCOMPARE(keyColor(), QColor("#1a2532").rgba());
+        window.setSong({});
+        QVERIFY(window.view_->playbackKeys.empty());
     }
     void englishInterface() {
         QVERIFY(language_.load("en"));
@@ -282,9 +436,9 @@ class UiTests : public QObject {
         QCOMPARE(edited, uint16_t(0));
         QCOMPARE(view.grab().toImage(), before);
         view.showPlayback = true;
-        view.liveKeys[0] = 1;
+        view.liveKeys[0][0] = 1;
         view.pressedKeys.insert(0);
-        view.playbackKeys[0] = 1;
+        view.playbackKeys[0][0] = 1;
         QCOMPARE(view.grab().toImage(), before); // No accidental code-zero highlight.
 
         // Win/Menu keys are unassigned by default but remain right-click editable.
