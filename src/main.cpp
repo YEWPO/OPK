@@ -26,6 +26,9 @@ int main(int argc, char **argv) {
         app = std::make_unique<QCoreApplication>(argc, argv);
     else
         app = std::make_unique<QApplication>(argc, argv);
+    // Native Windows file dialogs use the OS language rather than our translators.
+    if (!headless)
+        QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QCoreApplication::setApplicationName("OpenKeysPiano");
     QCoreApplication::setOrganizationName("OpenKeys");
     QCoreApplication::setApplicationVersion("0.1.0");
