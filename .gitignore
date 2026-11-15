@@ -8,3 +8,5 @@ __pycache__/
 /vcpkg_installed/
 *.sf2
 *.sf3
+/AGENTS.md
+/AGENTS.zh-CN.md
