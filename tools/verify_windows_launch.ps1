@@ -21,7 +21,8 @@ public static class OpenKeysWizard {
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
     [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr window);
     [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr window, int id);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool PostMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern IntPtr SendMessageTimeout(IntPtr window, uint message, IntPtr wparam, IntPtr lparam, uint flags, uint timeout, out IntPtr result);
     public static string Text(IntPtr window) {
         var text = new StringBuilder(1024);
         GetWindowText(window, text, text.Capacity);
@@ -52,10 +53,15 @@ public static class OpenKeysWizard {
         return result;
     }
     public static void Click(IntPtr button) {
-        SendMessage(button, 0x00f5, IntPtr.Zero, IntPtr.Zero); // BM_CLICK
+        // A synchronous click blocks inside nsDialogs::Show on custom pages.
+        if (!PostMessage(button, 0x00f5, IntPtr.Zero, IntPtr.Zero)) // BM_CLICK
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
     }
     public static int Checked(IntPtr button) {
-        return SendMessage(button, 0x00f0, IntPtr.Zero, IntPtr.Zero).ToInt32(); // BM_GETCHECK
+        IntPtr result;
+        if (SendMessageTimeout(button, 0x00f0, IntPtr.Zero, IntPtr.Zero, 2, 5000, out result) == IntPtr.Zero)
+            throw new TimeoutException("Installer checkbox did not respond.");
+        return result.ToInt32(); // BM_GETCHECK
     }
 }
 '@
@@ -87,6 +93,10 @@ foreach ($language in @(
                         if ([OpenKeysWizard]::Checked($run) -ne 1) { throw 'Run-now checkbox must default to checked.' }
                         if (-not $launch) {
                             [OpenKeysWizard]::Click($run)
+                            $checkDeadline = [DateTime]::UtcNow.AddSeconds(3)
+                            while ([OpenKeysWizard]::Checked($run) -ne 0 -and [DateTime]::UtcNow -lt $checkDeadline) {
+                                Start-Sleep -Milliseconds 20
+                            }
                             if ([OpenKeysWizard]::Checked($run) -ne 0) { throw 'Could not uncheck run-now.' }
                         }
                         [OpenKeysWizard]::Click($next)
