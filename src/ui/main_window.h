@@ -11,7 +11,7 @@
 #include <memory>
 class QLabel;
 class QPushButton;
-class QCheckBox;
+class QAction;
 class QProgressBar;
 class QSlider;
 class QDoubleSpinBox;
@@ -44,8 +44,8 @@ class MainWindow : public QMainWindow {
     KeyboardView *view_ = nullptr;
     QLabel *fontLabel_ = nullptr, *deviceLabel_ = nullptr, *titleLabel_ = nullptr, *timeLabel_ = nullptr,
            *recordLabel_ = nullptr;
-    QPushButton *playButton_ = nullptr, *recordButton_ = nullptr, *fontButton_ = nullptr;
-    QCheckBox *background_ = nullptr;
+    QPushButton *playButton_ = nullptr, *recordButton_ = nullptr;
+    QAction *fontAction_ = nullptr, *background_ = nullptr, *outputAction_ = nullptr;
     QProgressBar *importProgress_ = nullptr;
     QSlider *progress_ = nullptr;
     QDoubleSpinBox *speed_ = nullptr;

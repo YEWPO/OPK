@@ -18,7 +18,7 @@ class KeyboardView : public QWidget {
     // Clears local gesture state; the owner releases any accepted musical events.
     void resetMouseInteraction();
     QSize minimumSizeHint() const override {
-        return {880, 440};
+        return {880, 430};
     }
 
   protected:

@@ -1175,5 +1175,41 @@ Ctrl+Alt+F12：关闭后台演奏并立即止音。</translation>
         <source>Unmapped scan code 0x%1</source>
         <translation>未映射的扫描码 0x%1</translation>
     </message>
+    <message>
+        <source>File</source>
+        <translation>文件</translation>
+    </message>
+    <message>
+        <source>Exit</source>
+        <translation>退出</translation>
+    </message>
+    <message>
+        <source>Soundfont</source>
+        <translation>音源</translation>
+    </message>
+    <message>
+        <source>Import / Replace Soundfont</source>
+        <translation>导入／替换音源</translation>
+    </message>
+    <message>
+        <source>Output</source>
+        <translation>输出</translation>
+    </message>
+    <message>
+        <source>Settings</source>
+        <translation>设置</translation>
+    </message>
+    <message>
+        <source>Language</source>
+        <translation>语言</translation>
+    </message>
+    <message>
+        <source>Help</source>
+        <translation>帮助</translation>
+    </message>
+    <message>
+        <source>Invalid EOP key-signature ID</source>
+        <translation>无效的 EOP 调号编号</translation>
+    </message>
 </context>
 </TS>

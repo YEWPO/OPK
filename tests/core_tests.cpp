@@ -404,18 +404,15 @@ class CoreTests : public QObject {
             for (bool zeroSection : {false, true}) {
                 if (version == 301 && zeroSection)
                     continue;
-                for (const auto &[offset, expected] :
-                     std::array<std::pair<int32_t, int>, 6>{{{0, 60},
-                                                             {9, 63},
-                                                             {-3, 63},
-                                                             {12, 60},
-                                                             {std::numeric_limits<int32_t>::min(), 68},
-                                                             {std::numeric_limits<int32_t>::max(), 65}}}) {
+                constexpr std::array<int, 15> shifts{-4, -3, -2, -1, -1, 0, 1, 1, 2, 3, 4, 5, 6, 6, 7};
+                for (size_t id = 0; id < shifts.size(); ++id) {
+                    const int expected = 60 + shifts[id];
                     auto data = fixture::decodedEop(version, false, zeroSection);
-                    fixture::u32(data, 0x1bc, uint32_t(offset));
+                    fixture::u32(data, 0x1bc, uint32_t(id));
                     const auto song = parseEop(fixture::encode(data));
                     QCOMPARE(song.events.size(), size_t(2));
                     QCOMPARE(song.events[0].note, expected);
+                    QCOMPARE(song.configurations.front().transpose, (shifts[id] + 12) % 12);
                     QCOMPARE(song.events[1].note, expected);
                     QCOMPARE(song.events[0].kind, Kind::NoteOn);
                     QCOMPARE(song.events[1].kind, Kind::NoteOff);
@@ -442,20 +439,20 @@ class CoreTests : public QObject {
                 const qsizetype second = 0x1bc + 28 + (version == 201 ? 42 : 52) + 4;
                 auto data = fixture::decodedEop(version, true, zeroSection);
                 fixture::u32(data, 0x1bc, 9);
-                fixture::u32(data, second, 3);
+                fixture::u32(data, second, 14);
                 auto song = parseEop(fixture::encode(data));
                 QCOMPARE(song.events.size(), size_t(4));
                 QCOMPARE(song.events[0].note, 63);
-                QCOMPARE(song.events[1].note, 73);
+                QCOMPARE(song.events[1].note, 71);
                 QCOMPARE(song.events[2].note, 63);
-                QCOMPARE(song.events[3].note, 73);
+                QCOMPARE(song.events[3].note, 71);
                 // Distinct base pitches become the same pitch after per-layer offsets.
-                fixture::u32(data, 0x1bc, 3);
-                fixture::u32(data, second, 7);
+                fixture::u32(data, 0x1bc, 5);
+                fixture::u32(data, second, 0);
                 song = parseEop(fixture::encode(data));
                 QCOMPARE(song.events.size(), size_t(2));
-                QCOMPARE(song.events[0].note, 69);
-                QCOMPARE(song.events[1].note, 69);
+                QCOMPARE(song.events[0].note, 60);
+                QCOMPARE(song.events[1].note, 60);
             }
         }
     }
@@ -471,16 +468,117 @@ class CoreTests : public QObject {
             fixture::u16(data, note, 125);
             QVERIFY_EXCEPTION_THROWN(parseEop(fixture::encode(data)), FileError);
             fixture::u16(data, note, 0);
-            fixture::u32(data, 0x1bc, 0);
+            fixture::u32(data, 0x1bc, 5);
             song = parseEop(fixture::encode(data));
             QCOMPARE(song.events[0].note, 0);
             QCOMPARE(song.events[1].note, 0);
+        }
+        for (int version : {201, 301}) {
+            for (bool zero : {false, true}) {
+                if (version == 301 && zero)
+                    continue;
+                auto data = fixture::decodedEop(version, false, zero);
+                for (uint32_t invalid : {15u, uint32_t(-1), 0x80000000u, 0x7fffffffu}) {
+                    fixture::u32(data, 0x1bc, invalid);
+                    QVERIFY_EXCEPTION_THROWN(parseEop(fixture::encode(data)), FileError);
+                }
+                fixture::u32(data, 0x1bc, 0);
+                fixture::u16(data, 0x1bc + 28 + 34, 4);
+                QCOMPARE(parseEop(fixture::encode(data)).events.front().note, 0);
+                fixture::u16(data, 0x1bc + 28 + 34, 3);
+                QVERIFY_EXCEPTION_THROWN(parseEop(fixture::encode(data)), FileError);
+            }
         }
         auto data = fixture::decodedEop(200);
         fixture::u32(data, 0x1b8, 9);
         const auto song = parseEop(fixture::encode(data, true));
         QCOMPARE(song.events[0].note, 60);
         QCOMPARE(song.events[1].note, 60);
+    }
+    void eopSignatureSteps() {
+        constexpr std::array<int, 15> shifts{-4, -3, -2, -1, -1, 0, 1, 1, 2, 3, 4, 5, 6, 6, 7};
+        for (int version : {201, 301})
+            for (int delta : {-1, 1})
+                for (int layerMode : {0, 1, 2, 3}) {
+                    const int stride = version == 301 ? 52 : 42;
+                    const auto section = [&](int id, int pitch, int control) {
+                        QByteArray b(4 + 28 + (control ? 2 : 1) * stride, '\0');
+                        fixture::u32(b, 0, b.size() - 4);
+                        fixture::u32(b, 4, id);
+                        b[4 + 28 + 4] = 30;
+                        fixture::u16(b, 4 + 28 + 32, 0x90);
+                        fixture::u16(b, 4 + 28 + 34, pitch);
+                        if (control) {
+                            b[4 + 28 + stride + 4] = 31;
+                            fixture::u16(b, 4 + 28 + stride + 32, control > 0 ? 0x190 : 0x290);
+                        }
+                        return b;
+                    };
+                    auto b = fixture::decodedEop(version).first(0x1b8);
+                    auto maps = section(5, 60, delta);
+                    const int secondDelta = layerMode < 2 ? 0 : (layerMode == 2 ? delta : -delta);
+                    if (layerMode)
+                        maps += section(0, 64, secondDelta);
+                    fixture::u32(b, 0x28, maps.size());
+                    b += maps;
+                    const auto event = [&](int time, int status, int key) {
+                        QByteArray e(16, '\0');
+                        fixture::real(e, 0, time);
+                        e[8] = char(status);
+                        e[9] = char(key);
+                        e[10] = status == 0x90 ? 90 : 0;
+                        b += e;
+                    };
+                    std::vector<int> expected;
+                    int id = 5, secondId = 0;
+                    for (int step = 0; step < 31; ++step) {
+                        event(step * 10, 0x90, 30);
+                        // Change signature while the note is held; releases must use the press pitch.
+                        event(step * 10 + 1, 0x90, 31);
+                        event(step * 10 + 2, 0x80, 31);
+                        event(step * 10 + 3, 0x80, 30);
+                        std::set<int> notes{60 + shifts[size_t(id)]};
+                        if (layerMode)
+                            notes.insert(64 + shifts[size_t(secondId)]);
+                        for (int pitch : notes)
+                            expected.push_back(pitch);
+                        for (int pitch : notes)
+                            expected.push_back(pitch);
+                        id = (id + delta + 15) % 15;
+                        secondId = (secondId + secondDelta + 15) % 15;
+                    }
+                    b += QByteArray(16, '\0');
+                    const auto song = parseEop(fixture::encode(b));
+                    QCOMPARE(song.events.size(), expected.size());
+                    for (size_t i = 0; i < expected.size(); ++i)
+                        QCOMPARE(song.events[i].note, expected[i]);
+                    QCOMPARE(song.configurations.size(), size_t(32));
+                    id = 5;
+                    for (const auto &config : song.configurations) {
+                        QCOMPARE(config.transpose, (shifts[size_t(id)] + 12) % 12);
+                        id = (id + delta + 15) % 15;
+                    }
+                    QVERIFY(song.warnings.empty());
+                }
+    }
+    void eopSignatureChangeBounds() {
+        for (bool lower : {false, true}) {
+            auto data = fixture::encode(fixture::changingKeyEop());
+            fixture::u32(data, 0x1bc, 5);
+            fixture::u16(data, 0x1bc + 28 + 34, lower ? 0 : 127);
+            fixture::u16(data, 0x1bc + 28 + 52 + 32, lower ? 0x290 : 0x190);
+            const qsizetype start = 0x1bc + 28 + 104;
+            // The release succeeds even though the new signature would move this pitch out of range.
+            auto released = data.first(start + 6 * 16);
+            released += QByteArray(16, '\0');
+            const auto song = parseEop(fixture::encode(released));
+            QCOMPARE(song.events.size(), size_t(2));
+            QCOMPARE(song.events.front().note, lower ? 0 : 127);
+            QCOMPARE(song.events.back().note, song.events.front().note);
+            QCOMPARE(song.configurations.back().transpose, lower ? 11 : 1);
+            // Pressing that key again under the new signature must fail.
+            QVERIFY_EXCEPTION_THROWN(parseEop(fixture::encode(data)), FileError);
+        }
     }
     void eopMetadataAndExtendedKeys() {
         auto data = fixture::decodedEop(201);

@@ -2,6 +2,7 @@
 #include "core/language.h"
 #include "platform/input.h"
 #include "ui/keyboard_view.h"
+#include <QActionGroup>
 #include <QApplication>
 #include <QButtonGroup>
 #include <QCheckBox>
@@ -21,6 +22,8 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
+#include <QMenuBar>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
@@ -241,8 +244,8 @@ MainWindow::MainWindow(bool diagnostic, const QString &soundfontDirectory)
                                     .filePath("soundfonts")
                               : soundfontDirectory;
     setWindowTitle(QCoreApplication::translate("OpenKeys", "OpenKeys Piano · Keyboard Piano"));
-    resize(1200, 960);
-    setMinimumSize(980, 760);
+    resize(1200, 740);
+    setMinimumSize(980, 640);
     const auto configDir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
     if (!diagnostic_)
         QDir().mkpath(configDir);
@@ -270,7 +273,7 @@ MainWindow::MainWindow(bool diagnostic, const QString &soundfontDirectory)
     input_->emergency = [this] { emergencyStop(); };
     background_->setEnabled(input_->globalAvailable());
     background_->setToolTip(input_->error());
-    connect(background_, &QCheckBox::toggled, this, [this](bool enabled) {
+    connect(background_, &QAction::toggled, this, [this](bool enabled) {
         if (!input_->setBackground(enabled)) {
             QSignalBlocker block(background_);
             background_->setChecked(input_->background());
@@ -279,7 +282,9 @@ MainWindow::MainWindow(bool diagnostic, const QString &soundfontDirectory)
     });
     connect(&loader_, &QFutureWatcher<ImportedSoundfont>::finished, this, [this] {
         loading_ = false;
-        fontButton_->setEnabled(true);
+        fontAction_->setEnabled(true);
+        outputAction_->setEnabled(true);
+        background_->setEnabled(input_->globalAvailable());
         importProgress_->hide();
         auto result = loader_.result();
         if (!result.font) {
@@ -365,12 +370,11 @@ void MainWindow::buildUi() {
     setStyleSheet(R"(
         QMainWindow,QDialog,QWidget#mainContent,QScrollArea {background:#0d141d;color:#e6edf5;}
         QWidget {font-family:"Noto Sans CJK SC","Microsoft YaHei UI",sans-serif;font-size:13px;color:#e6edf5;}
-        QLabel#brand {font-size:25px;font-weight:700;letter-spacing:1px;}
         QLabel#muted {color:#8493a8;}
         QFrame#card,QGroupBox {background:#141e2b;border:1px solid #2b394b;border-radius:10px;}
-        QGroupBox {margin-top:9px;padding-top:14px;}
+        QGroupBox {margin-top:7px;padding-top:10px;}
         QGroupBox::title {subcontrol-origin:margin;left:14px;color:#93a4bc;}
-        QPushButton {background:#213045;border:1px solid #354761;border-radius:6px;padding:9px 14px;}
+        QPushButton {background:#213045;border:1px solid #354761;border-radius:6px;padding:6px 12px;}
         QPushButton:hover {background:#2e425d;border-color:#6d8bad;}
         QPushButton:disabled {color:#58677c;background:#16202d;}
         QPushButton#primary:disabled {background:#213045;color:#58677c;border-color:#354761;}
@@ -394,6 +398,13 @@ void MainWindow::buildUi() {
         QFileDialog QLineEdit:disabled,QFileDialog QComboBox:disabled,QFileDialog QToolButton:disabled {
             color:#8493a8;
         }
+        QMenuBar,QMenu {background:#101824;color:#e6edf5;}
+        QMenuBar::item {padding:5px 12px;background:transparent;}
+        QMenuBar::item:selected,QMenu::item:selected {background:#354761;}
+        QMenu::item {padding:6px 28px;}
+        QMenu::item:disabled {color:#8493a8;}
+        QMenu::indicator:checked {background:#83dfc1;border:3px solid #354761;}
+        QMenu::separator {height:1px;background:#354761;margin:4px 10px;}
         QCheckBox {spacing:8px;}
         QProgressBar {border:0;background:#263449;border-radius:3px;max-height:6px;}
         QProgressBar::chunk {background:#83dfc1;border-radius:3px;}
@@ -405,45 +416,75 @@ void MainWindow::buildUi() {
     auto *central = new QWidget;
     central->setObjectName("mainContent");
     auto *root = new QVBoxLayout(central);
-    root->setContentsMargins(24, 20, 24, 16);
-    root->setSpacing(14);
+    root->setContentsMargins(16, 10, 16, 8);
+    root->setSpacing(6);
     root->setSizeConstraint(QLayout::SetMinimumSize);
     auto *scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setWidget(central);
     setCentralWidget(scroll);
-    auto *header = new QHBoxLayout;
-    auto *brand = new QLabel("OpenKeys Piano");
-    brand->setObjectName("brand");
-    header->addWidget(brand);
-    auto *subtitle = new QLabel(QCoreApplication::translate("OpenKeys", "Your keyboard, your piano"));
-    subtitle->setObjectName("muted");
-    header->addWidget(subtitle);
-    header->addStretch();
-    auto *about = button(QCoreApplication::translate("OpenKeys", "About"));
-    header->addWidget(about);
-    auto *demo = button(QCoreApplication::translate("OpenKeys", "Demo"));
+    menuBar()->setNativeMenuBar(false);
+    const auto menu = [this](const QString &title) {
+        auto *result = menuBar()->addMenu(title);
+        connect(result, &QMenu::aboutToShow, this, [this] { releaseHeld(); });
+        connect(result, &QMenu::aboutToHide, this, [this] {
+            QTimer::singleShot(0, this, [this] {
+                if (!QApplication::activePopupWidget() && !QApplication::activeModalWidget())
+                    view_->setFocus();
+            });
+        });
+        return result;
+    };
+    auto *fileMenu = menu(QCoreApplication::translate("OpenKeys", "File"));
+    auto *open = fileMenu->addAction(QCoreApplication::translate("OpenKeys", "Open EOP / Recording"));
+    open->setObjectName("openPerformance");
+    auto *save = fileMenu->addAction(QCoreApplication::translate("OpenKeys", "Save Recording"));
+    save->setObjectName("saveRecording");
+    auto *demo = fileMenu->addAction(QCoreApplication::translate("OpenKeys", "Demo"));
     demo->setObjectName("demoSong");
-    header->addWidget(demo);
-    connect(demo, &QPushButton::clicked, this, [this] { openPath(":/assets/demo.eopiano.json"); });
-    auto *settings = button(QCoreApplication::translate("OpenKeys", "Audio Settings"));
-    header->addWidget(settings);
-    root->addLayout(header);
-    auto *languageRow = new QHBoxLayout;
-    languageRow->addStretch();
-    languageRow->addWidget(new QLabel(QStringLiteral("Language / 语言")));
-    auto *languageChoice = new QComboBox;
+    connect(demo, &QAction::triggered, this, [this] { openPath(":/assets/demo.eopiano.json"); });
+    fileMenu->addSeparator();
+    auto *quit = fileMenu->addAction(QCoreApplication::translate("OpenKeys", "Exit"));
+    connect(quit, &QAction::triggered, this, &QWidget::close);
+    auto *fontMenu = menu(QCoreApplication::translate("OpenKeys", "Soundfont"));
+    auto *currentFont = fontMenu->addAction(QString());
+    currentFont->setObjectName("currentSoundfont");
+    currentFont->setEnabled(false);
+    connect(fontMenu, &QMenu::aboutToShow, this,
+            [this, currentFont] { currentFont->setText(fontLabel_->text()); });
+    fontAction_ = fontMenu->addAction(QCoreApplication::translate("OpenKeys", "Import / Replace Soundfont"));
+    fontAction_->setObjectName("importSoundfont");
+    connect(fontAction_, &QAction::triggered, this, [this] { chooseSoundfont(); });
+    auto *outputMenu = menu(QCoreApplication::translate("OpenKeys", "Output"));
+    outputAction_ = outputMenu->addAction(QCoreApplication::translate("OpenKeys", "Audio Settings"));
+    outputAction_->setObjectName("audioSettings");
+    connect(outputAction_, &QAction::triggered, this, [this] { audioSettings(); });
+    auto *settingsMenu = menu(QCoreApplication::translate("OpenKeys", "Settings"));
+    auto *profile = settingsMenu->addAction(QCoreApplication::translate("OpenKeys", "Keymap"));
+    profile->setObjectName("keymapSettings");
+    connect(profile, &QAction::triggered, this, [this] { profileSettings(); });
+    background_ = settingsMenu->addAction(QCoreApplication::translate("OpenKeys", "Background Playing"));
+    background_->setObjectName("backgroundPlaying");
+    background_->setCheckable(true);
+    auto *languages = settingsMenu->addMenu(QCoreApplication::translate("OpenKeys", "Language"));
+    // Submenus release held notes and restore the instrument focus just like top-level menus.
+    connect(languages, &QMenu::aboutToShow, this, [this] { releaseHeld(); });
+    auto *languageChoice = new QActionGroup(this);
     languageChoice->setObjectName("languageChoice");
-    languageChoice->addItem(QCoreApplication::translate("OpenKeys", "Follow System"), "system");
-    languageChoice->addItem(QStringLiteral("English"), "en");
-    languageChoice->addItem(QStringLiteral("简体中文"), "zh_CN");
-    languageChoice->setCurrentIndex(languageChoice->findData(
-        Language::preference(settings_, QCoreApplication::applicationDirPath(), false)));
-    languageRow->addWidget(languageChoice);
-    root->addLayout(languageRow);
-    connect(languageChoice, &QComboBox::activated, this, [this, languageChoice] {
-        settings_.setValue("ui/language", languageChoice->currentData());
+    const auto preference = Language::preference(settings_, QCoreApplication::applicationDirPath(), false);
+    for (const auto &[label, value] : std::array<std::pair<QString, QString>, 3>{
+             {{QCoreApplication::translate("OpenKeys", "Follow System"), "system"},
+              {QStringLiteral("English"), "en"},
+              {QStringLiteral("简体中文"), "zh_CN"}}}) {
+        auto *action = languages->addAction(label);
+        action->setData(value);
+        action->setCheckable(true);
+        languageChoice->addAction(action);
+        action->setChecked(value == preference);
+    }
+    connect(languageChoice, &QActionGroup::triggered, this, [this](QAction *action) {
+        settings_.setValue("ui/language", action->data());
         settings_.sync();
         statusBar()->showMessage(
             settings_.status() == QSettings::NoError
@@ -451,9 +492,13 @@ void MainWindow::buildUi() {
                                               "Language saved. Restart OpenKeys Piano to apply it.")
                 : QCoreApplication::translate(
                       "OpenKeys", "Could not save the language setting. Check configuration permissions."));
-        view_->setFocus();
     });
-    connect(about, &QPushButton::clicked, this, [this] {
+    auto *helpMenu = menu(QCoreApplication::translate("OpenKeys", "Help"));
+    auto *guide = helpMenu->addAction(QCoreApplication::translate("OpenKeys", "Import Guide"));
+    guide->setObjectName("soundfontGuide");
+    connect(guide, &QAction::triggered, this, [this] { showSoundfontGuide(); });
+    auto *about = helpMenu->addAction(QCoreApplication::translate("OpenKeys", "About"));
+    connect(about, &QAction::triggered, this, [this] {
         releaseHeld();
         QMessageBox::about(
             this, QCoreApplication::translate("OpenKeys", "About OpenKeys Piano"),
@@ -465,33 +510,17 @@ void MainWindow::buildUi() {
                 "reported.\nCtrl+Alt+F12: disable background playing and silence all notes.")
                 .arg(QCoreApplication::applicationVersion()));
     });
-    connect(settings, &QPushButton::clicked, this, [this] { audioSettings(); });
-    auto *status = new QHBoxLayout;
     fontLabel_ = new QLabel(QCoreApplication::translate("OpenKeys", "○ Import a soundfont to start playing"));
     fontLabel_->setObjectName("soundfontStatus");
-    status->addWidget(fontLabel_, 1);
-    fontButton_ = button(QCoreApplication::translate("OpenKeys", "Import Soundfont"));
-    fontButton_->setObjectName("importSoundfont");
-    status->addWidget(fontButton_);
-    auto *guide = button(QCoreApplication::translate("OpenKeys", "Import Guide"));
-    guide->setObjectName("soundfontGuide");
-    status->addWidget(guide);
-    connect(guide, &QPushButton::clicked, this, [this] { showSoundfontGuide(); });
-    background_ = new QCheckBox(QCoreApplication::translate("OpenKeys", "Background Playing"));
-    status->addWidget(background_);
-    auto *panic = button(QCoreApplication::translate("OpenKeys", "Panic"));
-    panic->setToolTip(
-        QCoreApplication::translate("OpenKeys", "Ctrl+Alt+F12 · Also disables background playing"));
-    status->addWidget(panic);
-    root->addLayout(status);
+    fontLabel_->setMaximumWidth(480);
+    statusBar()->addPermanentWidget(fontLabel_, 1);
     importProgress_ = new QProgressBar;
     importProgress_->setObjectName("fontImportProgress");
+    importProgress_->setFixedWidth(180);
     importProgress_->setStyleSheet("QProgressBar {min-height:20px;max-height:20px;}");
     importProgress_->setTextVisible(true);
+    statusBar()->addPermanentWidget(importProgress_);
     importProgress_->hide();
-    root->addWidget(importProgress_);
-    connect(fontButton_, &QPushButton::clicked, this, [this] { chooseSoundfont(); });
-    connect(panic, &QPushButton::clicked, this, [this] { emergencyStop(); });
     auto *transport = new QFrame;
     transport->setObjectName("card");
     auto *transportLayout = new QVBoxLayout(transport);
@@ -515,10 +544,6 @@ void MainWindow::buildUi() {
     recordButton_->setEnabled(false);
     recordButton_->setObjectName("record");
     row->addWidget(recordButton_);
-    auto *open = button(QCoreApplication::translate("OpenKeys", "Open EOP / Recording"));
-    row->addWidget(open);
-    auto *save = button(QCoreApplication::translate("OpenKeys", "Save Recording"));
-    row->addWidget(save);
     row->addStretch();
     row->addWidget(new QLabel(QCoreApplication::translate("OpenKeys", "Speed")));
     speed_ = new ArrowOnlySpin<QDoubleSpinBox>;
@@ -573,7 +598,7 @@ void MainWindow::buildUi() {
         toggleRecord();
         view_->setFocus();
     });
-    connect(open, &QPushButton::clicked, this, [this] {
+    connect(open, &QAction::triggered, this, [this] {
         if (recordingActive_)
             finishRecord();
         releaseHeld();
@@ -585,7 +610,7 @@ void MainWindow::buildUi() {
         if (!path.isEmpty())
             openPath(path);
     });
-    connect(save, &QPushButton::clicked, this, [this] { saveSong(); });
+    connect(save, &QAction::triggered, this, [this] { saveSong(); });
     connect(speed_, &QDoubleSpinBox::valueChanged, this, [this](double value) { audio_.setSpeed(value); });
     auto *performance = new QHBoxLayout;
     auto *keyGroup = new QGroupBox(QCoreApplication::translate("OpenKeys", "Performance Settings"));
@@ -603,8 +628,8 @@ void MainWindow::buildUi() {
     };
     auto *topRow = new QHBoxLayout;
     auto *handsRow = new QHBoxLayout;
-    topRow->setSpacing(20);
-    handsRow->setSpacing(20);
+    topRow->setSpacing(12);
+    handsRow->setSpacing(12);
     keyRow->addLayout(topRow);
     keyRow->addLayout(handsRow);
     keyGroup->setToolTip(QCoreApplication::translate(
@@ -637,10 +662,7 @@ void MainWindow::buildUi() {
         keyboard_.keymap.transpose = value;
         updateProfile();
     });
-    auto *profile = button(QCoreApplication::translate("OpenKeys", "Keymap"));
     handsRow->addStretch();
-    topRow->addWidget(profile);
-    connect(profile, &QPushButton::clicked, this, [this] { profileSettings(); });
     performance->addWidget(keyGroup, 1);
     root->addLayout(performance);
     view_ = new KeyboardView;
@@ -663,21 +685,13 @@ void MainWindow::buildUi() {
         dispatchLive(Event{0, down ? Kind::NoteOn : Kind::NoteOff, uint8_t(note), uint8_t(down ? 100 : 0),
                            Hand::Right, 0, 0});
     };
-    auto *foot = new QHBoxLayout;
-    auto *hint = new QLabel(QCoreApplication::translate(
-        "OpenKeys",
-        "Click or drag to play · Right-click to edit · Independent hand velocities · Original EOP keys"));
-    hint->setObjectName("muted");
-    hint->setWordWrap(true);
-    foot->addWidget(hint, 1);
     auto *volume = new QSlider(Qt::Horizontal);
     volume->setRange(0, 100);
     volume->setValue(settings_.value("volume", 80).toInt());
     volume->setFixedWidth(120);
     volume->setToolTip(QCoreApplication::translate("OpenKeys", "Master volume"));
-    foot->addWidget(new QLabel(QCoreApplication::translate("OpenKeys", "Volume")));
-    foot->addWidget(volume);
-    root->addLayout(foot);
+    topRow->addWidget(new QLabel(QCoreApplication::translate("OpenKeys", "Volume")));
+    topRow->addWidget(volume);
     connect(volume, &QSlider::valueChanged, this, [this](int value) {
         audio_.setVolume(value / 100.);
         settings_.setValue("volume", value);
@@ -973,7 +987,11 @@ void MainWindow::beginFontTask(const QString &path, bool importing) {
     wasAudioActive_ = false;
     loading_ = true;
     importing_ = importing;
-    fontButton_->setEnabled(false);
+    fontAction_->setEnabled(false);
+    outputAction_->setEnabled(false);
+    background_->setEnabled(false);
+    playButton_->setEnabled(false);
+    recordButton_->setEnabled(false);
     importProgress_->show();
     importProgress_->setRange(0, 100);
     importProgress_->setValue(0);

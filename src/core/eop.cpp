@@ -55,31 +55,27 @@ struct Mapping {
     std::set<MappedNote> notes;
     int velocity = -1;
     bool control = false;
-    int transposeDelta = 0;
+    int keyDelta = 0;
 };
 using Map = std::map<uint8_t, Mapping>;
-void merge(Map &to, const Map &from) {
-    for (const auto &[key, map] : from) {
-        auto &target = to[key];
-        target.notes.insert(map.notes.begin(), map.notes.end());
-        target.control = target.control || map.control;
-        if (map.transposeDelta) {
-            if (target.transposeDelta && target.transposeDelta != map.transposeDelta)
-                throw FileError("unsupported_layout",
-                                QCoreApplication::translate("OpenKeys", "Conflicting transpose actions"));
-            target.transposeDelta = map.transposeDelta;
-        }
-    }
-}
-Map section(const Reader &r, qsizetype begin, qsizetype length, int stride) {
+// EOP key-signature IDs include enharmonic entries; actions step through IDs.
+constexpr std::array<int, 15> KeyShifts{-4, -3, -2, -1, -1, 0, 1, 1, 2, 3, 4, 5, 6, 6, 7};
+struct Layer {
+    Map mappings;
+    int keyId = 5;
+    qsizetype header = 0;
+};
+using Layers = std::vector<Layer>;
+Layer section(const Reader &r, qsizetype begin, qsizetype length, int stride) {
     r.range(begin, length);
     if (length < 28 || (length - 28) % stride || (length - 28) / stride > 256)
         throw FileError("unsupported_layout",
                         QCoreApplication::translate("OpenKeys", "Invalid mapping section size"));
-    // Compatibility assumption: the first signed header word selects a pitch
-    // class via its negative, normalized upward within one octave. See docs.
-    const auto offset = std::bit_cast<int32_t>(r.u32(begin));
-    const int shift = int((-int64_t(offset) % 12 + 12) % 12);
+    const auto keyId = r.u32(begin);
+    if (keyId >= KeyShifts.size())
+        throw FileError("corrupt_eop",
+                        QCoreApplication::translate("OpenKeys", "Invalid EOP key-signature ID"));
+    const int shift = KeyShifts[keyId];
     Map result;
     for (qsizetype p = begin + 28; p < begin + length; p += stride) {
         const auto key = r.u8(p + 4);
@@ -99,23 +95,23 @@ Map section(const Reader &r, qsizetype begin, qsizetype length, int stride) {
                                     "OpenKeys", "EOP mapping offset produces an out-of-range pitch"));
             // Checked against the supplied v301 sample; v201 uses the same record prefix.
             const auto hand = r.u32(p + 8);
-            map.notes.insert({uint8_t(pitch), hand == 1   ? Hand::Left
-                                              : hand == 0 ? Hand::Right
-                                                          : Hand::Unknown});
+            map.notes.insert({uint8_t(note), hand == 1   ? Hand::Left
+                                             : hand == 0 ? Hand::Right
+                                                         : Hand::Unknown});
         } else {
             map.control = true;
             // Action identifiers are stored in the mapping, independently of the physical key.
             const auto action = r.u16(p + 32);
             if (action == 0x190 || action == 0x290)
-                map.transposeDelta = action == 0x190 ? 1 : -1;
+                map.keyDelta = action == 0x190 ? 1 : -1;
         }
         result.emplace(key, std::move(map));
     }
-    return result;
+    return {std::move(result), int(keyId), begin};
 }
-Map prefixed(const Reader &r, qsizetype begin, qsizetype end, int stride) {
+Layers prefixed(const Reader &r, qsizetype begin, qsizetype end, int stride) {
     r.range(begin, end - begin);
-    Map result;
+    Layers result;
     int layers = 0;
     while (begin < end) {
         if (++layers > 32 || end - begin < 4)
@@ -126,7 +122,7 @@ Map prefixed(const Reader &r, qsizetype begin, qsizetype end, int stride) {
         if (length > end - begin)
             throw FileError("unsupported_layout",
                             QCoreApplication::translate("OpenKeys", "Mapping exceeds its container"));
-        merge(result, section(r, begin, length, stride));
+        result.push_back(section(r, begin, length, stride));
         begin += length;
     }
     if (!layers)
@@ -165,7 +161,7 @@ Song parseEop(const QByteArray &raw) {
     Song song;
     song.title = metadata(r, 0x134);
     song.author = metadata(r, 0x174);
-    Map mappings;
+    Layers layers;
     qsizetype eventStart = 0, count = 0;
     if (version == 200) {
         if (raw.back() == 0)
@@ -180,6 +176,7 @@ Song parseEop(const QByteArray &raw) {
         const auto left = r.u32(base + 12), right = r.u32(base + 16);
         if (left > 100 || right > 100)
             throw FileError("corrupt_eop", QCoreApplication::translate("OpenKeys", "Invalid v200 dynamics"));
+        Layer layer;
         for (int key = 1; key <= 255; ++key) {
             const qsizetype p = base + 28 + (key - 1) * 12;
             if (r.u32(p) != uint32_t(key))
@@ -196,8 +193,9 @@ Song parseEop(const QByteArray &raw) {
                 m.velocity = int(((action == 1 ? right : left) * 127 + 50) / 100);
             } else
                 m.control = true;
-            mappings.emplace(uint8_t(key), std::move(m));
+            layer.mappings.emplace(uint8_t(key), std::move(m));
         }
+        layers.push_back(std::move(layer));
         if ((r.data.size() - eventStart) % 16 || r.data.size() - eventStart < 16)
             throw FileError("unsupported_layout",
                             QCoreApplication::translate("OpenKeys", "Invalid v200 event pool"));
@@ -215,7 +213,7 @@ Song parseEop(const QByteArray &raw) {
                 size = 4 + qsizetype(first);
             r.range(Header, size);
             eventStart = Header + size;
-            mappings = prefixed(r, Header, eventStart, stride);
+            layers = prefixed(r, Header, eventStart, stride);
         } else if (version == 201) {
             const qsizetype mapSize = r.u32(0x28), eventSize = r.u32(0x2c);
             if (mapSize < 4 || eventSize < 16 || eventSize % 16 || eventSize > r.data.size())
@@ -230,10 +228,12 @@ Song parseEop(const QByteArray &raw) {
             for (qsizetype length = 28; length <= eventStart - start && length <= 28 + 256 * 42;
                  length += 42) {
                 try {
-                    auto candidate = section(r, start, length, 42);
-                    if (start + length < eventStart)
-                        merge(candidate, prefixed(r, start + length, eventStart, 42));
-                    mappings = std::move(candidate);
+                    Layers candidate{section(r, start, length, 42)};
+                    if (start + length < eventStart) {
+                        auto remaining = prefixed(r, start + length, eventStart, 42);
+                        candidate.insert(candidate.end(), remaining.begin(), remaining.end());
+                    }
+                    layers = std::move(candidate);
                     ++candidates;
                 } catch (const FileError &) {
                 }
@@ -255,9 +255,8 @@ Song parseEop(const QByteArray &raw) {
                         QCoreApplication::translate("OpenKeys", "EOP event limit exceeded"));
     if (version != 200) {
         PerformanceConfig config;
-        const qsizetype header = Header + 4;
-        const auto offset = std::bit_cast<int32_t>(r.u32(header));
-        config.transpose = int((-int64_t(offset) % 12 + 12) % 12);
+        const qsizetype header = layers.front().header;
+        config.transpose = (KeyShifts[size_t(layers.front().keyId)] + 12) % 12;
         // The v301 sample carries per-hand octave and dynamics in these header words.
         if (version == 301) {
             for (size_t h = 0; h < 2; ++h) {
@@ -271,7 +270,6 @@ Song parseEop(const QByteArray &raw) {
         }
         song.configurations.push_back(config);
     }
-    int transposeDelta = 0;
     std::map<uint8_t, std::deque<std::vector<Event>>> active;
     double previous = -1;
     bool controlWarning = false;
@@ -285,22 +283,40 @@ Song parseEop(const QByteArray &raw) {
         const auto status = r.u8(p + 8), key = r.u8(p + 9), velocity = r.u8(p + 10);
         if ((status != 0x80 && status != 0x90) || velocity > 127 || !r.zero(p + 11, p + 16))
             throw FileError("corrupt_eop", QCoreApplication::translate("OpenKeys", "Invalid event record"));
-        const auto found = mappings.find(key);
-        if (found == mappings.end())
+        bool found = false;
+        Mapping m;
+        for (auto &layer : layers) {
+            const auto mapping = layer.mappings.find(key);
+            if (mapping == layer.mappings.end())
+                continue;
+            found = true;
+            const auto &entry = mapping->second;
+            if (entry.keyDelta && status == 0x90) {
+                layer.keyId = (layer.keyId + entry.keyDelta + 15) % 15;
+                if (&layer == &layers.front() && !song.configurations.empty()) {
+                    auto config = song.configurations.back();
+                    config.timeUs = int64_t(std::llround(ms * 1000));
+                    config.transpose = (KeyShifts[size_t(layer.keyId)] + 12) % 12;
+                    song.configurations.push_back(config);
+                }
+            } else if (entry.control && !entry.keyDelta)
+                controlWarning = true;
+            // Releases use the saved press, even if the current signature would overflow.
+            for (const auto &note : entry.notes) {
+                const int pitch = int(note.pitch) + (status == 0x90 ? KeyShifts[size_t(layer.keyId)] : 0);
+                if (pitch < 0 || pitch > 127)
+                    throw FileError(
+                        "corrupt_eop",
+                        QCoreApplication::translate("OpenKeys", "Transpose produces an out-of-range pitch"));
+                m.notes.insert({uint8_t(pitch), note.hand});
+            }
+            if (entry.velocity >= 0)
+                m.velocity = entry.velocity;
+        }
+        if (!found)
             throw FileError("unsupported_layout",
                             QCoreApplication::translate("OpenKeys", "Unmapped scan code 0x%1")
                                 .arg(key, 2, 16, QChar('0')));
-        const auto &m = found->second;
-        if (m.control && m.transposeDelta && !song.configurations.empty()) {
-            if (status == 0x90) {
-                auto config = song.configurations.back();
-                config.timeUs = int64_t(std::llround(ms * 1000));
-                config.transpose = (config.transpose + m.transposeDelta + 12) % 12;
-                transposeDelta = config.transpose - song.configurations.front().transpose;
-                song.configurations.push_back(config);
-            }
-        } else if (m.control)
-            controlWarning = true;
         if (status == 0x80 && !m.notes.empty()) {
             auto &held = active[key];
             if (held.empty())
@@ -323,11 +339,7 @@ Song parseEop(const QByteArray &raw) {
             // EOP's one-byte extended Set-1 codes use bit 7; the application
             // represents E0 separately in bit 8 to match Windows Raw Input.
             e.key = key >= 128 ? uint16_t((key & 0x7f) | 0x100) : key;
-            const int shifted = int(note.pitch) + transposeDelta;
-            if (shifted < 0 || shifted > 127)
-                throw FileError("corrupt_eop", QCoreApplication::translate(
-                                                   "OpenKeys", "Transpose produces an out-of-range pitch"));
-            e.note = uint8_t(shifted);
+            e.note = note.pitch;
             e.hand = note.hand;
             e.velocity = uint8_t(e.kind == Kind::NoteOn && m.velocity >= 0 ? m.velocity : velocity);
             if (e.kind == Kind::NoteOn && m.velocity == 0)

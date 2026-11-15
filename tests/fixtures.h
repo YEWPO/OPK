@@ -51,12 +51,14 @@ inline QByteArray decodedEop(int version, bool layered = false, bool zeroSection
         u32(b, 0x2c, 48);
         if (!zeroSection)
             u32(b, header, uint32_t(sectionSize));
+        u32(b, header + 4, 5);
         int p = header + 4 + 28;
         b[p + 4] = 30;
         u16(b, p + 32, 0x90);
         u16(b, p + 34, 60);
         if (layered) {
             u32(b, header + 4 + sectionSize, uint32_t(sectionSize));
+            u32(b, header + 4 + sectionSize + 4, 5);
             p = header + 4 + sectionSize + 4 + 28;
             b[p + 4] = 30;
             u16(b, p + 32, 0x90);
@@ -120,6 +122,7 @@ inline QByteArray twoHandEop(int version = 301, bool zeroSection = false, uint32
     u32(b, 0x1b8, zeroSection ? 0 : sectionSize);
     u32(b, 0x28, 4 + sectionSize);
     u32(b, 0x2c, 5 * 16);
+    u32(b, header, 5);
     b[record + 4] = 30;
     u32(b, record + 8, firstHand);
     u16(b, record + 32, 0x90);

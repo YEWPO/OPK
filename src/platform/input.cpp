@@ -5,6 +5,8 @@
 #include <QCoreApplication>
 #include <QKeyEvent>
 #include <QLineEdit>
+#include <QMenu>
+#include <QMenuBar>
 #include <QPlainTextEdit>
 #include <QTextEdit>
 #include <QWidget>
@@ -71,8 +73,9 @@ bool InputRouter::blocked() const {
     if (!focus || !window_->isAncestorOf(focus))
         return false;
     for (auto *w = focus; w; w = w->parentWidget())
-        if (qobject_cast<QLineEdit *>(w) || qobject_cast<QAbstractSpinBox *>(w) ||
-            qobject_cast<QTextEdit *>(w) || qobject_cast<QPlainTextEdit *>(w))
+        if (qobject_cast<QMenuBar *>(w) || qobject_cast<QMenu *>(w) || qobject_cast<QLineEdit *>(w) ||
+            qobject_cast<QAbstractSpinBox *>(w) || qobject_cast<QTextEdit *>(w) ||
+            qobject_cast<QPlainTextEdit *>(w))
             return true;
     return false;
 }

@@ -4,6 +4,7 @@
 #include "ui/keyboard_view.h"
 #include "ui/main_window.h"
 #include <QAbstractItemView>
+#include <QActionGroup>
 #include <QApplication>
 #include <QClipboard>
 #include <QComboBox>
@@ -16,10 +17,15 @@
 #include <QFileInfo>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
+#include <QMenuBar>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QScopeGuard>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStandardPaths>
@@ -314,9 +320,9 @@ class UiTests : public QObject {
         MainWindow window(true);
         QCOMPARE(window.findChild<QLabel *>("soundfontStatus")->text(),
                  "○ Import a soundfont to start playing");
-        QCOMPARE(window.findChild<QPushButton *>("demoSong")->text(), "Demo");
+        QCOMPARE(window.findChild<QAction *>("demoSong")->text(), "Demo");
         QCOMPARE(window.findChild<QSpinBox *>("leftOctave")->text(), "Original");
-        auto *language = window.findChild<QComboBox *>("languageChoice");
+        auto *language = window.findChild<QActionGroup *>("languageChoice");
         QVERIFY(language);
         QSettings settings("OpenKeys", "Piano");
         const auto before = settings.value("ui/language");
@@ -326,10 +332,13 @@ class UiTests : public QObject {
             else
                 settings.remove("ui/language");
         });
-        language->setCurrentIndex(language->findData("zh_CN"));
-        QVERIFY(QMetaObject::invokeMethod(language, "activated", Q_ARG(int, language->currentIndex())));
+        QVERIFY(language->isExclusive());
+        for (auto *action : language->actions())
+            if (action->data() == "zh_CN")
+                action->trigger();
+        QCOMPARE(language->checkedAction()->data().toString(), "zh_CN");
         QCOMPARE(settings.value("ui/language").toString(), "zh_CN");
-        QCOMPARE(window.findChild<QPushButton *>("demoSong")->text(), "Demo");
+        QCOMPARE(window.findChild<QAction *>("demoSong")->text(), "Demo");
         QVERIFY(window.statusBar()->currentMessage().contains("Restart"));
         bool guideChecked = false;
         QTimer::singleShot(0, &window, [&] {
@@ -345,8 +354,56 @@ class UiTests : public QObject {
             guideChecked = true;
             dialog->accept();
         });
-        window.findChild<QPushButton *>("soundfontGuide")->click();
+        window.findChild<QAction *>("soundfontGuide")->trigger();
         QVERIFY(guideChecked);
+    }
+    void compactMenus_data() {
+        QTest::addColumn<QString>("locale");
+        QTest::newRow("en") << QString("en");
+        QTest::newRow("zh") << QString("zh_CN");
+    }
+    void compactMenus() {
+        QFETCH(QString, locale);
+        QVERIFY(language_.load(locale));
+        MainWindow window(true);
+        QCOMPARE(window.size(), QSize(1200, 740));
+        QCOMPARE(window.minimumSize(), QSize(980, 640));
+        window.show();
+        window.activateWindow();
+        window.view_->setFocus();
+        QApplication::processEvents();
+        auto *scroll = qobject_cast<QScrollArea *>(window.centralWidget());
+        QVERIFY(scroll);
+        QCOMPARE(scroll->verticalScrollBar()->maximum(), 0);
+        QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
+        QCOMPARE(window.menuBar()->actions().size(), 5);
+        auto *menu = window.menuBar()->actions().front()->menu();
+        QVERIFY(menu);
+        window.key(30, true);
+        // Exercise a held musical note without requiring a real soundfont or audio device.
+        for (const auto &event : window.keyboard_.change(30, true))
+            window.dispatchLive(event);
+        QVERIFY(!window.view_->pressedKeys.empty());
+        QVERIFY(!window.view_->liveKeys.empty());
+        menu->popup(window.mapToGlobal(QPoint(0, 30)));
+        QApplication::processEvents();
+        QVERIFY(window.view_->pressedKeys.empty());
+        QVERIFY(window.view_->liveKeys.empty());
+        QVERIFY(window.keyboard_.releaseAll().empty());
+        bool routed = false;
+        window.input_->keyChanged = [&](uint16_t, bool down) { routed |= down; };
+        QTest::keyPress(menu, Qt::Key_A);
+        QVERIFY(!routed);
+        menu->hide();
+        QApplication::processEvents();
+        QCOMPARE(QApplication::focusWidget(), window.view_);
+        QTest::keyClick(window.view_, Qt::Key_F12, Qt::ControlModifier | Qt::AltModifier);
+        QVERIFY(!window.background_->isChecked());
+        window.resize(980, 640);
+        QApplication::processEvents();
+        QVERIFY(scroll->verticalScrollBar()->maximum() > 0);
+        scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum());
+        QVERIFY(window.view_->visibleRegion().boundingRect().height() > 0);
     }
     void startupDefaults() {
         const auto directory = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
@@ -598,11 +655,11 @@ class UiTests : public QObject {
         MainWindow window(true, dir.filePath("managed"));
         window.show();
         QVERIFY(window.findChild<QLabel *>("soundfontStatus")->text().contains("导入音源后开始演奏"));
-        auto *import = window.findChild<QPushButton *>("importSoundfont");
+        auto *import = window.findChild<QAction *>("importSoundfont");
         QVERIFY(import);
         QVERIFY(import->isEnabled());
         QVERIFY(!QFileInfo::exists(dir.filePath("managed/current.json")));
-        QTest::mouseClick(window.findChild<QPushButton *>("demoSong"), Qt::LeftButton);
+        window.findChild<QAction *>("demoSong")->trigger();
         QVERIFY(window.findChild<QLabel *>("trackTitle")->text().contains("初次相遇"));
         bool found = false;
         QTimer::singleShot(0, [&] {
@@ -614,7 +671,7 @@ class UiTests : public QObject {
                     content->toPlainText().contains(".sf2") && !content->openLinks();
             dialog->accept();
         });
-        QTest::mouseClick(window.findChild<QPushButton *>("soundfontGuide"), Qt::LeftButton);
+        window.findChild<QAction *>("soundfontGuide")->trigger();
         QVERIFY(found);
     }
     void importsPersistsAndRestoresCopy() {
@@ -630,7 +687,16 @@ class UiTests : public QObject {
             MainWindow window(true, store);
             window.show();
             window.loadFont(source);
-            QTRY_VERIFY_WITH_TIMEOUT(window.findChild<QPushButton *>("importSoundfont")->isEnabled(), 5000);
+            QVERIFY(!window.fontAction_->isEnabled());
+            QVERIFY(!window.outputAction_->isEnabled());
+            QVERIFY(!window.background_->isEnabled());
+            QVERIFY(!window.importProgress_->isHidden());
+            QVERIFY(!window.playButton_->isEnabled());
+            QVERIFY(!window.recordButton_->isEnabled());
+            QTRY_VERIFY_WITH_TIMEOUT(window.findChild<QAction *>("importSoundfont")->isEnabled(), 5000);
+            QVERIFY(window.outputAction_->isEnabled());
+            QCOMPARE(window.background_->isEnabled(), window.input_->globalAvailable());
+            QVERIFY(window.importProgress_->isHidden());
             QCOMPARE(window.findChild<QLabel *>("soundfontStatus")->text(), QStringLiteral("● 我的钢琴"));
             id = readImportedSoundfont(store).id;
             QVERIFY(!id.isEmpty());
@@ -649,7 +715,7 @@ class UiTests : public QObject {
             corrupt.write("bad");
             corrupt.close();
             window.loadFont(bad);
-            QTRY_VERIFY_WITH_TIMEOUT(window.findChild<QPushButton *>("importSoundfont")->isEnabled(), 5000);
+            QTRY_VERIFY_WITH_TIMEOUT(window.findChild<QAction *>("importSoundfont")->isEnabled(), 5000);
             QCOMPARE(readImportedSoundfont(store).id, id);
             QCOMPARE(window.findChild<QLabel *>("soundfontStatus")->text(), QStringLiteral("● 我的钢琴"));
             const auto oldCopy = managedSoundfontPath(store, id);
@@ -887,7 +953,7 @@ class UiTests : public QObject {
             QCOMPARE(buttons->button(QDialogButtonBox::Ok)->text(), QStringLiteral("确定"));
             QCOMPARE(buttons->button(QDialogButtonBox::Cancel)->text(), QStringLiteral("取消"));
         });
-        window.audioSettings();
+        window.findChild<QAction *>("audioSettings")->trigger();
     }
     void musicalKeyEditor() {
         MainWindow window(true);
@@ -1055,11 +1121,7 @@ class UiTests : public QObject {
             dialog->reject();
             QFAIL("Missing reset button");
         });
-        for (auto *candidate : window.findChildren<QPushButton *>())
-            if (candidate->text() == QStringLiteral("键位方案")) {
-                candidate->click();
-                break;
-            }
+        window.findChild<QAction *>("keymapSettings")->trigger();
         QCOMPARE(transpose->text(), QStringLiteral("C"));
         QCOMPARE(window.findChild<QSpinBox *>("leftOctave")->text(), QStringLiteral("原音区"));
         QCOMPARE(window.findChild<QSpinBox *>("rightOctave")->text(), QStringLiteral("原音区"));
