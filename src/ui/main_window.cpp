@@ -15,6 +15,7 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFontDatabase>
 #include <QFormLayout>
 #include <QFrame>
 #include <QGridLayout>
@@ -399,9 +400,18 @@ MainWindow::~MainWindow() {
     }
 }
 void MainWindow::buildUi() {
-    setStyleSheet(R"(
+    const auto fonts = QFontDatabase::families();
+    QString fontFamily = QFontDatabase::systemFont(QFontDatabase::GeneralFont).family();
+    for (const auto *preferred : {"Noto Sans CJK SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI"})
+        if (fonts.contains(QLatin1String(preferred), Qt::CaseInsensitive)) {
+            fontFamily = QLatin1String(preferred);
+            break;
+        }
+    // Resolve an installed family explicitly: older Qt Windows builds can use
+    // missing-glyph metrics for the first unavailable family in a stylesheet list.
+    setStyleSheet(QString::fromUtf8(R"(
         QMainWindow,QDialog,QWidget#mainContent,QScrollArea {background:#0d141d;color:#e6edf5;}
-        QWidget {font-family:"Noto Sans CJK SC","Microsoft YaHei UI",sans-serif;font-size:13px;color:#e6edf5;}
+        QWidget {font-family:"%1";font-size:13px;color:#e6edf5;}
         QLabel#muted {color:#8493a8;}
         QFrame#card,QGroupBox {background:#141e2b;border:1px solid #2b394b;border-radius:10px;}
         QGroupBox {margin-top:7px;padding-top:10px;}
@@ -444,7 +454,8 @@ void MainWindow::buildUi() {
         QSlider::handle:horizontal {background:#83dfc1;width:12px;margin:-4px 0;border-radius:6px;}
         QStatusBar {background:#101824;color:#93a4bc;}
         QToolTip {background:#263449;color:white;border:1px solid #354761;}
-    )");
+    )")
+                      .arg(fontFamily));
     auto *central = new QWidget;
     central->setObjectName("mainContent");
     auto *root = new QVBoxLayout(central);
