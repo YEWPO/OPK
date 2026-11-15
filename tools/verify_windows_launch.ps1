@@ -21,6 +21,8 @@ public static class OpenKeysWizard {
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
     [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr window);
     [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr window, int id);
+    [DllImport("user32.dll")] private static extern int GetDlgCtrlID(IntPtr window);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool PostMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern IntPtr SendMessageTimeout(IntPtr window, uint message, IntPtr wparam, IntPtr lparam, uint flags, uint timeout, out IntPtr result);
     public static string Text(IntPtr window) {
@@ -28,12 +30,22 @@ public static class OpenKeysWizard {
         GetWindowText(window, text, text.Capacity);
         return text.ToString();
     }
-    public static IntPtr Window(int process) {
+    public static IntPtr Window(int process, string installer) {
         IntPtr result = IntPtr.Zero;
         EnumWindows((window, data) => {
             uint pid;
             GetWindowThreadProcessId(window, out pid);
-            if (pid == process && IsWindowVisible(window) && Text(window).Contains("OpenKeys")) {
+            bool matches = pid == process;
+            if (!matches) {
+                try {
+                    matches = string.Equals(System.Diagnostics.Process.GetProcessById((int)pid).MainModule.FileName,
+                                            installer, StringComparison.OrdinalIgnoreCase);
+                } catch (System.ComponentModel.Win32Exception) {
+                } catch (InvalidOperationException) {
+                } catch (ArgumentException) {
+                }
+            }
+            if (matches && IsWindowVisible(window) && Text(window).Contains("OpenKeys")) {
                 result = window;
                 return false;
             }
@@ -57,6 +69,25 @@ public static class OpenKeysWizard {
         if (!PostMessage(button, 0x00f5, IntPtr.Zero, IntPtr.Zero)) // BM_CLICK
             throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
     }
+    public static void Advance(IntPtr window, IntPtr button) {
+        // Deliver the button notification directly; BM_CLICK can be ignored
+        // when the runner's desktop has not made the wizard its active dialog.
+        if (!PostMessage(window, 0x0111, new IntPtr(1), button)) // WM_COMMAND / IDOK / BN_CLICKED
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+    }
+    public static string Describe(IntPtr parent) {
+        var items = new List<string>();
+        EnumChildWindows(parent, (window, data) => {
+            if (IsWindowVisible(window)) {
+                string text = Text(window).Replace("\r", " ").Replace("\n", " ");
+                if (text.Length > 120) text = text.Substring(0, 120);
+                if (text.Length > 0)
+                    items.Add(GetDlgCtrlID(window) + ":" + (IsWindowEnabled(window) ? "enabled:" : "disabled:") + text);
+            }
+            return true;
+        }, IntPtr.Zero);
+        return Text(parent) + " | " + string.Join(" | ", items);
+    }
     public static int Checked(IntPtr button) {
         IntPtr result;
         if (SendMessageTimeout(button, 0x00f0, IntPtr.Zero, IntPtr.Zero, 2, 5000, out result) == IntPtr.Zero)
@@ -79,14 +110,22 @@ foreach ($language in @(
         $setup = $null
         try {
             # /D must be last and unquoted, even when it contains spaces.
-            $setup = Start-Process $installer -ArgumentList "/LANG=$($language.Id) /DESKTOP=0 /STARTMENU=0 /D=$installRoot" -PassThru
+            $setup = Start-Process $installer -ArgumentList "/LANG=$($language.Id) /DESKTOP=0 /STARTMENU=0 /D=$installRoot" -WindowStyle Normal -PassThru
             $deadline = [DateTime]::UtcNow.AddSeconds(90)
             $finished = $false
+            $lastPage = ''
+            Write-Host "Started interactive installer pid=$($setup.Id), language=$($language.Id), launch=$launch"
             while ([DateTime]::UtcNow -lt $deadline) {
                 $setup.Refresh()
                 if ($setup.HasExited) { throw 'Installer exited before the finish page.' }
-                $window = [OpenKeysWizard]::Window($setup.Id)
+                $window = [OpenKeysWizard]::Window($setup.Id, $installer)
                 if ($window -ne [IntPtr]::Zero) {
+                    [void][OpenKeysWizard]::SetForegroundWindow($window)
+                    $page = [OpenKeysWizard]::Describe($window)
+                    if ($page -ne $lastPage) {
+                        Write-Host "Installer page: $page"
+                        $lastPage = $page
+                    }
                     $run = [OpenKeysWizard]::Child($window, $language.Label)
                     $next = [OpenKeysWizard]::GetDlgItem($window, 1)
                     if ($run -ne [IntPtr]::Zero) {
@@ -99,17 +138,17 @@ foreach ($language in @(
                             }
                             if ([OpenKeysWizard]::Checked($run) -ne 0) { throw 'Could not uncheck run-now.' }
                         }
-                        [OpenKeysWizard]::Click($next)
+                        [OpenKeysWizard]::Advance($window, $next)
                         $finished = $true
                         break
                     }
                     if ($next -ne [IntPtr]::Zero -and [OpenKeysWizard]::IsWindowEnabled($next)) {
-                        [OpenKeysWizard]::Click($next)
+                        [OpenKeysWizard]::Advance($window, $next)
                     }
                 }
                 Start-Sleep -Milliseconds 300
             }
-            if (-not $finished) { throw 'Timed out reaching the installer finish page.' }
+            if (-not $finished) { throw "Timed out reaching the installer finish page. Last page: $lastPage" }
             if (-not $setup.WaitForExit(30000) -or $setup.ExitCode -ne 0) { throw 'Interactive installation did not finish successfully.' }
             $deadline = [DateTime]::UtcNow.AddSeconds($(if ($launch) { 30 } else { 3 }))
             $started = @()
