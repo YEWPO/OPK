@@ -652,7 +652,8 @@ void MainWindow::buildUi() {
     auto *keyGroup = new QGroupBox(QCoreApplication::translate("OpenKeys", "Performance Settings"), central);
     keyGroup->setObjectName("performanceSettings");
     auto *keyRow = new QHBoxLayout(keyGroup);
-    keyRow->setSpacing(8);
+    keyRow->setContentsMargins(8, 8, 8, 8);
+    keyRow->setSpacing(4);
     const auto field = [keyGroup](const QString &name, QWidget *control) {
         auto *group = new QWidget(keyGroup);
         auto *layout = new QHBoxLayout(group);
@@ -676,7 +677,7 @@ void MainWindow::buildUi() {
     volume->setObjectName("masterVolume");
     volume->setRange(0, 100);
     volume->setValue(settings_.value("volume", 80).toInt());
-    volume->setFixedWidth(72);
+    volume->setFixedWidth(64);
     volume->setToolTip(QCoreApplication::translate("OpenKeys", "Master volume"));
     keyRow->addWidget(field(QCoreApplication::translate("OpenKeys", "Volume"), volume));
     connect(volume, &QSlider::valueChanged, this, [this](int value) {

@@ -376,6 +376,21 @@ class UiTests : public QObject {
         QApplication::processEvents();
         auto *scroll = qobject_cast<QScrollArea *>(window.centralWidget());
         QVERIFY(scroll);
+        const auto describeOverflow = [&] {
+            if (scroll->horizontalScrollBar()->maximum() == 0)
+                return;
+            auto *group = window.findChild<QGroupBox *>("performanceSettings");
+            qInfo() << "Performance layout:" << group->size() << group->minimumSizeHint();
+            for (auto *control : group->findChildren<QWidget *>()) {
+                if (control->objectName().isEmpty() && !qobject_cast<QLabel *>(control))
+                    continue;
+                qInfo() << control->metaObject()->className() << control->objectName() << control->size()
+                        << control->minimumSizeHint() << control->font().toString();
+                if (auto *label = qobject_cast<QLabel *>(control))
+                    qInfo() << label->text();
+            }
+        };
+        describeOverflow();
         QCOMPARE(scroll->verticalScrollBar()->maximum(), 0);
         QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
         QCOMPARE(window.menuBar()->actions().size(), 5);
@@ -403,6 +418,7 @@ class UiTests : public QObject {
         QVERIFY(!window.background_->isChecked());
         window.resize(980, 640);
         QApplication::processEvents();
+        describeOverflow();
         QCOMPARE(window.size(), QSize(980, 640));
         QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
         auto *group = window.findChild<QGroupBox *>("performanceSettings");
