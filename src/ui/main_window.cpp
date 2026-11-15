@@ -17,6 +17,7 @@
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QIcon>
 #include <QKeyEvent>
@@ -614,7 +615,9 @@ void MainWindow::buildUi() {
     connect(speed_, &QDoubleSpinBox::valueChanged, this, [this](double value) { audio_.setSpeed(value); });
     auto *performance = new QHBoxLayout;
     auto *keyGroup = new QGroupBox(QCoreApplication::translate("OpenKeys", "Performance Settings"));
-    auto *keyRow = new QVBoxLayout(keyGroup);
+    auto *keyRow = new QGridLayout(keyGroup);
+    keyRow->setHorizontalSpacing(12);
+    keyRow->setColumnStretch(3, 1);
     const auto field = [](const QString &name, QWidget *control) {
         auto *group = new QWidget;
         auto *layout = new QHBoxLayout(group);
@@ -626,29 +629,23 @@ void MainWindow::buildUi() {
         layout->addWidget(control);
         return group;
     };
-    auto *topRow = new QHBoxLayout;
-    auto *handsRow = new QHBoxLayout;
-    topRow->setSpacing(12);
-    handsRow->setSpacing(12);
-    keyRow->addLayout(topRow);
-    keyRow->addLayout(handsRow);
     keyGroup->setToolTip(QCoreApplication::translate(
         "OpenKeys",
         "Key and octave changes affect new live notes only. Playback uses the pitches in the file."));
     auto *transpose = performanceSpin(-12, 12, keyboard_.keymap.transpose, PerformanceSpin::Key);
     transpose->setObjectName("transpose");
-    topRow->addWidget(field(QCoreApplication::translate("OpenKeys", "Key"), transpose));
-    topRow->addStretch();
+    keyRow->addWidget(field(QCoreApplication::translate("OpenKeys", "Key"), transpose), 0, 0);
     for (int hand = 0; hand < 2; ++hand) {
         auto *octave = performanceSpin(-3, 3, keyboard_.keymap.octave[size_t(hand)], PerformanceSpin::Octave);
         octave->setObjectName(hand == 0 ? "leftOctave" : "rightOctave");
-        handsRow->addWidget(field(hand == 0 ? QCoreApplication::translate("OpenKeys", "Left Octave")
-                                            : QCoreApplication::translate("OpenKeys", "Right Octave"),
-                                  octave));
+        keyRow->addWidget(field(hand == 0 ? QCoreApplication::translate("OpenKeys", "Left Octave")
+                                          : QCoreApplication::translate("OpenKeys", "Right Octave"),
+                                octave),
+                          hand, 1);
         auto *velocity = performanceSpin(0, 100, velocityPercent(keyboard_.keymap.velocity[size_t(hand)]),
                                          PerformanceSpin::Number);
         velocity->setObjectName(hand == 0 ? "leftVelocity" : "rightVelocity");
-        handsRow->addWidget(field(QCoreApplication::translate("OpenKeys", "Velocity (%)"), velocity));
+        keyRow->addWidget(field(QCoreApplication::translate("OpenKeys", "Velocity (%)"), velocity), hand, 2);
         connect(octave, &QSpinBox::valueChanged, this, [this, hand](int value) {
             keyboard_.keymap.octave[size_t(hand)] = value;
             updateProfile();
@@ -662,7 +659,6 @@ void MainWindow::buildUi() {
         keyboard_.keymap.transpose = value;
         updateProfile();
     });
-    handsRow->addStretch();
     performance->addWidget(keyGroup, 1);
     root->addLayout(performance);
     view_ = new KeyboardView;
@@ -690,8 +686,7 @@ void MainWindow::buildUi() {
     volume->setValue(settings_.value("volume", 80).toInt());
     volume->setFixedWidth(120);
     volume->setToolTip(QCoreApplication::translate("OpenKeys", "Master volume"));
-    topRow->addWidget(new QLabel(QCoreApplication::translate("OpenKeys", "Volume")));
-    topRow->addWidget(volume);
+    keyRow->addWidget(field(QCoreApplication::translate("OpenKeys", "Volume"), volume), 1, 0);
     connect(volume, &QSlider::valueChanged, this, [this](int value) {
         audio_.setVolume(value / 100.);
         settings_.setValue("volume", value);
