@@ -46,7 +46,7 @@ class CoreTests : public QObject {
             QCOMPARE(scanFromQt(Qt::Key_unknown, code), uint16_t(code));
 #endif
         auto map = Keymap::defaults();
-        for (auto code : {0, 347, 348, 349})
+        for (auto code : {0, 57, 347, 348, 349})
             QVERIFY(!map.bindings.contains(code));
         for (auto code : {347, 348, 349})
             map.bindings[code] = {uint16_t(code), 60, Hand::Left, false};
@@ -71,6 +71,7 @@ class CoreTests : public QObject {
             for (const bool releaseFirst : {true, false}) {
                 KeyHolds holds;
                 KeyboardState state;
+                state.keymap.bindings[57] = {57, 0, Hand::Unknown, true};
                 Song recording;
                 const auto change = [&](KeySource source, bool down) {
                     if (!holds.change(uint16_t(code), down, source))
@@ -128,6 +129,7 @@ class CoreTests : public QObject {
     }
     void pedalAndVelocity() {
         KeyboardState state;
+        state.keymap.bindings[57] = {57, 0, Hand::Unknown, true};
         state.keymap.bindings[58] = {58, 0, Hand::Unknown, true};
         auto first = state.change(57, true);
         QCOMPARE(first.size(), size_t(3));
@@ -148,6 +150,43 @@ class CoreTests : public QObject {
         state.keymap.transpose = 1;
         QVERIFY(state.change(31, true).empty());
     }
+    void latchedSustainAndCustomPedal() {
+        for (const bool latchFirst : {false, true}) {
+            for (const bool releaseLatchFirst : {false, true}) {
+                KeyboardState state;
+                QVERIFY(state.change(57, true).empty());
+                QVERIFY(state.change(57, false).empty());
+                state.keymap.bindings[58] = {58, 0, Hand::Unknown, true};
+                const auto first = latchFirst ? state.setSustain(true) : state.change(58, true);
+                QCOMPARE(first.size(), size_t(3));
+                const auto second = latchFirst ? state.change(58, true) : state.setSustain(true);
+                QVERIFY(second.empty());
+                QVERIFY(state.setSustain(true).empty());
+                const auto release = releaseLatchFirst ? state.setSustain(false) : state.change(58, false);
+                QVERIFY(release.empty());
+                const auto last =
+                    releaseLatchFirst ? state.change(58, false, 100) : state.setSustain(false, 100);
+                QCOMPARE(last.size(), size_t(3));
+                Song song;
+                song.events = first;
+                song.events.insert(song.events.end(), last.begin(), last.end());
+                validateSong(song);
+                for (const auto &event : last) {
+                    QCOMPARE(event.velocity, 0);
+                    QCOMPARE(event.timeUs, int64_t(100));
+                }
+                QVERIFY(state.releaseAll().empty());
+            }
+        }
+        KeyboardState state;
+        state.setSustain(true);
+        state.keymap.bindings[58] = {58, 0, Hand::Unknown, true};
+        state.change(58, true);
+        const auto releases = state.releaseAll(200);
+        QCOMPARE(releases.size(), size_t(3));
+        QVERIFY(state.releaseAll().empty());
+        QCOMPARE(state.setSustain(true).size(), size_t(3));
+    }
     void zeroVelocity() {
         KeyboardState state;
         const auto held = state.change(30, true);
@@ -163,8 +202,8 @@ class CoreTests : public QObject {
         QCOMPARE(released.size(), size_t(1));
         QCOMPARE(released[0].kind, Kind::NoteOff);
         QCOMPARE(released[0].note, held[0].note);
-        QCOMPARE(state.change(57, true).size(), size_t(3));
-        QCOMPARE(state.change(57, false).size(), size_t(3));
+        QCOMPARE(state.setSustain(true).size(), size_t(3));
+        QCOMPARE(state.setSustain(false).size(), size_t(3));
         QVERIFY(state.releaseAll().empty());
         QTemporaryDir dir;
         const auto path = dir.filePath("silent.json");

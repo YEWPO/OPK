@@ -48,12 +48,12 @@ class LanguageTests : public QObject {
         Language language;
         QVERIFY(language.load("zh_CN"));
         QCOMPARE(QCoreApplication::translate("OpenKeys", "Audio Settings"), QStringLiteral("音频设置"));
-        QCOMPARE(keyName(57), QStringLiteral("Space · 延音"));
+        QCOMPARE(keyName(57), QStringLiteral("Space"));
         const auto save = QCoreApplication::translate("QPlatformTheme", "Save");
         QVERIFY2(save != "Save", qPrintable(save));
         QVERIFY(language.load("en"));
         QCOMPARE(QCoreApplication::translate("OpenKeys", "Audio Settings"), "Audio Settings");
-        QCOMPARE(keyName(57), "Space · Sustain");
+        QCOMPARE(keyName(57), "Space");
         QCOMPARE(QCoreApplication::translate("QPlatformTheme", "Save"), "Save");
     }
 };

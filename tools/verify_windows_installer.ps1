@@ -11,6 +11,13 @@ if ($scripts.Count -ne 1) { throw 'Expected exactly one generated NSIS script.' 
 $script = Get-Content -LiteralPath $scripts[0].FullName -Raw -Encoding UTF8
 $expectedVersion = [regex]::Match($script, '(?m)^\s*!define VERSION "(\d+\.\d+\.\d+)"\s*$').Groups[1].Value
 if (-not $expectedVersion) { throw 'Generated installer has no valid product version.' }
+if ($script -notmatch '!define MUI_FINISHPAGE_RUN "\$INSTDIR\\(?:\.\\)?openkeys\.exe"' -or
+    $script -notmatch '!define MUI_FINISHPAGE_RUN_TEXT "\$\(OpenKeysRunNow\)"' -or
+    $script -match '(?m)^\s*!define MUI_FINISHPAGE_RUN_NOTCHECKED' -or
+    $script -notmatch 'LangString OpenKeysRunNow \$\{LANG_ENGLISH\}' -or
+    $script -notmatch 'LangString OpenKeysRunNow \$\{LANG_SIMPCHINESE\}') {
+    throw 'Installer must offer a bilingual, checked-by-default run-now option.'
+}
 
 function Assert-ProductMetadata([string]$Path) {
     $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($Path)
@@ -183,6 +190,10 @@ foreach ($language in @(
                 throw 'Installer language was not saved for uninstall.'
             }
             $executable = Join-Path $installRoot 'openkeys.exe'
+            if (@(Get-Process -Name openkeys -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Path -eq $executable }).Count) {
+                throw 'Silent installation must not launch the application.'
+            }
             if (-not (Test-Path $executable -PathType Leaf)) { throw 'Installed application is missing.' }
             foreach ($name in @('openkeys.exe', 'openkeys-soundfont-check.exe', 'Uninstall.exe')) {
                 Assert-ProductMetadata (Join-Path $installRoot $name)

@@ -17,6 +17,7 @@ class QSlider;
 class QDoubleSpinBox;
 class QCloseEvent;
 class UiTests;
+class QCheckBox;
 namespace piano {
 class InputRouter;
 class KeyboardView;
@@ -49,6 +50,7 @@ class MainWindow : public QMainWindow {
     QProgressBar *importProgress_ = nullptr;
     QSlider *progress_ = nullptr;
     QDoubleSpinBox *speed_ = nullptr;
+    QCheckBox *sustain_ = nullptr;
     bool recordingActive_ = false, dirty_ = false, diagnostic_ = false, loading_ = false;
     int mouseHeld_ = -1;
     size_t visualCursor_ = 0;
@@ -77,18 +79,19 @@ class MainWindow : public QMainWindow {
     void seekPlayback(int value);
     void cancelSeekDrag();
     void toggleRecord();
+    void startRecording();
     void finishRecord();
     bool maybeSave();
     bool saveSong();
     void audioSettings();
     void editKey(uint16_t);
     void profileSettings();
-    void updateProfile();
+    bool updateProfile();
     void setSong(Song song);
     void startAudio(bool allowReload = true);
     void beginFontTask(const QString &path, bool importing);
     void chooseSoundfont();
-    void showSoundfontGuide();
+    void showGuide(bool soundfont);
     void showError(const QString &title, const QString &detail);
 };
 } // namespace piano

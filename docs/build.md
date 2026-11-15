@@ -70,7 +70,7 @@ Copies and sampler loading run on a worker thread. Failed/cancelled imports remo
 
 Startup loads only the explicitly imported bank identified by this metadata. There is no bundled/development-directory fallback. Old `QSettings` external paths are migration hints requiring an explicit import. Sample-rate changes reload the managed copy without importing it again.
 
-Both import guides are embedded as Qt resources in the UI library and installed as `docs/soundfont.md` and `docs/soundfont.zh-CN.md`. Their language links also work in the offline viewer. It works without network access, a working directory or the source checkout.
+The bilingual soundfont and EOP / recording guides are embedded as Qt resources in the UI library and installed as `docs/soundfont.md`, `docs/soundfont.zh-CN.md`, `docs/performance.md` and `docs/performance.zh-CN.md`. Their language links also work in the offline viewer. It works without network access, a working directory or the source checkout.
 
 ## Optional soundfont diagnostics
 
@@ -106,3 +106,5 @@ python3 tools/generate_previews.py --executable /absolute/path/to/openkeys
 ```
 
 The script fixes Fusion style, scaling, font size and the initial window state. `docs/preview.png` is English; `docs/preview.zh-CN.png` is Chinese. They are actual application captures, not mockups. Regenerate all PNG and ICO assets from the shared SVG with `python3 tools/generate_icons.py`; the mark combines the OKP wordmark with ivory piano keys on a dark rounded square. Review both screenshots and every icon size before committing.
+
+The interactive installer finish page offers **Run OpenKeys Piano now**, selected by default. Uncheck it to finish without launching. Silent installation never starts the application.

@@ -1211,5 +1211,41 @@ Ctrl+Alt+F12：关闭后台演奏并立即止音。</translation>
         <source>Invalid EOP key-signature ID</source>
         <translation>无效的 EOP 调号编号</translation>
     </message>
+    <message>
+        <source>Choose Soundfont &gt; Import / Replace Soundfont to begin. Help &gt; Soundfont Import Guide works offline.</source>
+        <translation>请通过「音源 → 导入／替换音源」开始；「帮助 → 音源导入教程」可离线查看。</translation>
+    </message>
+    <message>
+        <source>EOP / Recording Guide</source>
+        <translation>曲谱／录音打开教程</translation>
+    </message>
+    <message>
+        <source>L oct.</source>
+        <translation>左八度</translation>
+    </message>
+    <message>
+        <source>R oct.</source>
+        <translation>右八度</translation>
+    </message>
+    <message>
+        <source>L vel.</source>
+        <translation>左力度</translation>
+    </message>
+    <message>
+        <source>R vel.</source>
+        <translation>右力度</translation>
+    </message>
+    <message>
+        <source>Keep sustain on for live playing. Included in recordings; file playback uses its own sustain.</source>
+        <translation>开启后持续延音，仅影响现场弹奏并写入录音；文件回放使用文件自身的延音。</translation>
+    </message>
+    <message>
+        <source>Could not read the guide. See the installed docs directory.</source>
+        <translation>无法读取教程，请查看安装目录中的 docs 文件夹。</translation>
+    </message>
+    <message>
+        <source>Piano · A0–C8 · Click or drag to play   |   Sustain: Performance Settings · Left Shift: soft · Right Shift: loud</source>
+        <translation>钢琴 / A0–C8 · 点击或拖动演奏 | 延音：演奏设置 · 左 Shift 弱奏 · 右 Shift 强奏</translation>
+    </message>
 </context>
 </TS>

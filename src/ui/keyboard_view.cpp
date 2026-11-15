@@ -95,8 +95,9 @@ void KeyboardView::paintEvent(QPaintEvent *) {
     const auto area = pianoRect();
     p.setPen(muted);
     p.drawText(QRectF(16, area.top() - 27, width() - 32, 22),
-               QCoreApplication::translate("OpenKeys", "Piano · A0–C8 · Click or drag to play   |   Space: "
-                                                       "sustain · Left Shift: soft · Right Shift: loud"));
+               QCoreApplication::translate("OpenKeys",
+                                           "Piano · A0–C8 · Click or drag to play   |   Sustain: "
+                                           "Performance Settings · Left Shift: soft · Right Shift: loud"));
     const double w = area.width() / 52.;
     int index = 0;
     for (int n = 21; n <= 108; ++n) {

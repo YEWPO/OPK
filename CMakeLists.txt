@@ -52,7 +52,8 @@ target_link_libraries(openkeys-soundfont-check PRIVATE piano_diagnostics)
 qt_add_resources(openkeys-soundfont-check check_assets PREFIX "/" FILES assets/demo.eopiano.json)
 add_library(piano_ui src/ui/main_window.cpp src/ui/keyboard_view.cpp src/platform/input.cpp)
 target_link_libraries(piano_ui PUBLIC piano_audio Qt6::Widgets PRIVATE Qt6::Concurrent)
-qt_add_resources(piano_ui import_guide PREFIX "/" FILES docs/soundfont.md docs/soundfont.zh-CN.md assets/demo.eopiano.json)
+qt_add_resources(piano_ui import_guide PREFIX "/" FILES docs/soundfont.md docs/soundfont.zh-CN.md
+  docs/performance.md docs/performance.zh-CN.md assets/demo.eopiano.json)
 qt_add_resources(piano_ui app_icons PREFIX "/" FILES
   assets/icons/openkeys-16.png assets/icons/openkeys-24.png assets/icons/openkeys-32.png
   assets/icons/openkeys-48.png assets/icons/openkeys-64.png assets/icons/openkeys-128.png
@@ -165,6 +166,7 @@ if(WIN32)
   set(CPACK_NSIS_EXECUTABLES_DIRECTORY ".")
   set(CPACK_CREATE_DESKTOP_LINKS openkeys)
   set(CPACK_NSIS_INSTALLED_ICON_NAME "openkeys.exe")
+  set(CPACK_NSIS_MUI_FINISHPAGE_RUN "openkeys.exe")
   # Let CPack quote/convert this path; TO_NATIVE_PATH applies shell escaping too early.
   set(_installer_icon "${CMAKE_SOURCE_DIR}/assets/icons/openkeys.ico")
   set(CPACK_NSIS_MUI_ICON "${_installer_icon}")
