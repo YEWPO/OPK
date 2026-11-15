@@ -16,6 +16,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFontDatabase>
 #include <QGroupBox>
 #include <QLabel>
 #include <QLineEdit>
@@ -90,6 +91,10 @@ class UiTests : public QObject {
     Q_OBJECT
     Language language_;
   private slots:
+    void initTestCase() {
+        QVERIFY2(!QFontDatabase::families().isEmpty(),
+                 "UI tests require real fonts, not placeholder metrics.");
+    }
     void init() {
         QVERIFY(language_.load("zh_CN"));
     }
@@ -1426,6 +1431,18 @@ class UiTests : public QObject {
 };
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
+#ifdef Q_OS_WIN
+    // FreeType's directory scan does not include .ttc files. Add the installed
+    // Chinese collections explicitly so offscreen checks also use real CJK text.
+    if (QGuiApplication::platformName() == "offscreen") {
+        const QDir fonts(qEnvironmentVariable("SystemRoot") + "/Fonts");
+        for (const auto *name : {"msyh.ttc", "msyhbd.ttc", "msjh.ttc"}) {
+            const auto path = fonts.filePath(QLatin1String(name));
+            if (QFileInfo::exists(path) && QFontDatabase::addApplicationFont(path) < 0)
+                return 2;
+        }
+    }
+#endif
     QTemporaryDir settings;
 #ifndef Q_OS_WIN
     qputenv("XDG_CONFIG_HOME", settings.path().toUtf8());

@@ -127,6 +127,12 @@ if(BUILD_TESTING)
       PROPERTIES ENVIRONMENT_MODIFICATION
       "PATH=path_list_prepend:${_test_dependencies}/bin;QT_PLUGIN_PATH=path_list_prepend:${_test_dependencies}/Qt6/plugins")
   endif()
+  if(WIN32)
+    # Windows offscreen uses FreeType rather than the native font database.
+    file(TO_CMAKE_PATH "$ENV{SystemRoot}/Fonts" _windows_fonts)
+    set_property(TEST ui APPEND PROPERTY ENVIRONMENT_MODIFICATION
+      "QT_QPA_FONTDIR=set:${_windows_fonts}")
+  endif()
 endif()
 if(NOT WIN32)
   install(TARGETS openkeys openkeys-soundfont-check RUNTIME DESTINATION .)
