@@ -347,6 +347,37 @@ class CoreTests : public QObject {
         song = parseEop(fixture::encode(fixture::decodedEop(201, true, true)));
         QCOMPARE(song.events.size(), size_t(4));
     }
+    void eopLayerLimit_data() {
+        QTest::addColumn<int>("version");
+        QTest::addColumn<bool>("zeroSection");
+        QTest::newRow("v201-prefixed") << 201 << false;
+        QTest::newRow("v201-zero") << 201 << true;
+        QTest::newRow("v301-prefixed") << 301 << false;
+    }
+    void eopLayerLimit() {
+        QFETCH(int, version);
+        QFETCH(bool, zeroSection);
+        const auto base = fixture::decodedEop(version, false, zeroSection);
+        const int sectionSize = 28 + (version == 301 ? 52 : 42);
+        const auto section = base.mid(0x1bc, sectionSize);
+        QByteArray prefix(4, '\0');
+        fixture::u32(prefix, 0, uint32_t(sectionSize));
+        for (int count : {32, 33}) {
+            auto bytes = base;
+            for (int layer = 1; layer < count; ++layer)
+                bytes.insert(bytes.size() - 48, prefix + section);
+            fixture::u32(bytes, 0x28, uint32_t(bytes.size() - 48 - 0x1b8));
+            if (count == 32) {
+                const auto song = parseEop(fixture::encode(bytes));
+                // Identical notes across layers are merged, including their releases.
+                QCOMPARE(song.events.size(), size_t(2));
+                QCOMPARE(song.events.front().note, 60);
+                QCOMPARE(song.events.back().kind, Kind::NoteOff);
+            } else {
+                QVERIFY_EXCEPTION_THROWN(parseEop(fixture::encode(bytes)), FileError);
+            }
+        }
+    }
     void eopHandMappings_data() {
         QTest::addColumn<int>("version");
         QTest::addColumn<bool>("zeroSection");

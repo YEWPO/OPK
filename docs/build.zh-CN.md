@@ -44,11 +44,13 @@ vcpkg 清单固定基线 `ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0`。依赖需�
 
 每次推送的 Windows CI 都会构建、部署、验证脱离开发 PATH 的启动，并生成安装器和便携 ZIP，位于 `OpenKeysPiano-Windows-installer` 工件。手动工作流选择 `build_installer=true` 也生成相同包；PR 运行构建和测试，不生成安装包。
 
-推送匹配 `v*` 的标签时，同一工作流先完成 Linux 和 Windows 验证，最后由 `release` 任务在两者都成功后发布。该任务下载已验证的 Windows 工件，检查安装器和便携 ZIP 与标签版本一致，生成 `SHA256SUMS.txt`，再创建 GitHub Release。只有发布任务拥有 `contents: write` 权限；分支、PR 和手动运行不会发布。Release 包含带版本号的 NSIS 安装器（例如 `OpenKeysPiano-0.1.1-Windows-AMD64.exe`）、对应便携 ZIP 和 `SHA256SUMS.txt`。0.1.1 的 Linux 仍仅支持源码构建。
+推送匹配 `v*` 的标签时，同一工作流先完成 Linux 和 Windows 验证，最后由 `release` 任务在两者都成功后发布。该任务下载已验证的 Windows 工件，检查安装器和便携 ZIP 与标签版本一致，生成 `SHA256SUMS.txt`，再创建 GitHub Release。只有发布任务拥有 `contents: write` 权限；分支、PR 和手动运行不会发布。Release 包含带版本号的 NSIS 安装器（例如 `OpenKeysPiano-0.2.0-Windows-AMD64.exe`）、对应便携 ZIP 和 `SHA256SUMS.txt`。0.2.0 的 Linux 仍仅支持源码构建。
 
-CI 在一次性 Windows 机器执行 `tools/verify_windows_installer.ps1`，覆盖两种安装语言、带空格的中文路径、默认与全部快捷方式选项、Unicode `IShellLinkW` 目标读取、脱离开发 PATH 的直接/快捷方式启动、升级、占用文件失败和卸载清理。不得在已有 OpenKeys 安装的工作站运行该脚本。交互界面和 DPI 检查仍需实机完成，见 [验证文档](validation.zh-CN.md)。
+NSIS 快捷方式页面默认勾选桌面和开始菜单快捷方式，可分别取消。安装器从不修改 PATH，静默安装沿用相同的快捷方式默认值。
 
-应用版本、关于窗口、Windows 文件资源及安装包统一采用 CMake 项目版本。两个自有可执行文件、安装器和卸载器均包含产品与版本信息；已安装应用列表中的发行者为 `OpenKeysPiano`。这些字段不构成数字签名：v0.1.1 未签名，Windows 安全提示仍可能显示“未知发布者”或 SmartScreen 警告。CI 检查安装器、卸载器、已安装程序及便携 ZIP 内程序的文件资源，并验证注册表中的安装发行者和版本。
+CI 在一次性 Windows 机器执行 `tools/verify_windows_installer.ps1`，覆盖两种安装语言、带空格的中文路径、默认与全部快捷方式选项、Unicode `IShellLinkW` 目标读取、脱离开发 PATH 的直接/快捷方式启动、升级、占用文件失败和卸载清理。`tools/verify_windows_launch.ps1` 还操作真实的双语完成页，检查默认勾选、勾选后启动和取消后不启动。不得在已有 OpenKeys 安装的工作站运行这两个脚本。完整视觉检查和 DPI 检查仍需实机完成，见 [验证文档](validation.zh-CN.md)。
+
+应用版本、关于窗口、Windows 文件资源及安装包统一采用 CMake 项目版本。vcpkg 清单版本、README 下载链接和双语发布说明必须同步；资源检查拒绝不一致，并在标签运行时检查标签版本。两个自有可执行文件、安装器和卸载器均包含产品与版本信息；已安装应用列表中的发行者为 `OpenKeysPiano`。这些字段不构成数字签名：v0.2.0 未签名，Windows 安全提示仍可能显示“未知发布者”或 SmartScreen 警告。CI 检查安装器、卸载器、已安装程序及便携 ZIP 内程序的文件资源，并验证注册表中的安装发行者和版本。
 
 ## 应用图标
 
@@ -97,7 +99,7 @@ OPENKEYS_TEST_SOUNDFONT=/path/to/piano.sf2 ctest --test-dir build -R '^real_soun
 
 使用 Qt 的 `lupdate src -ts translations/openkeys_zh_CN.ts` 更新目录，审阅并翻译所有新增条目后重建。正常构建只编译翻译，不改写源文件。`python3 tools/verify_resources.py` 检查翻译覆盖、占位符、双语文档链接、图标尺寸及预览，需要 Python Pillow，CI 与 CTest 一起执行。
 
-语言保存在现有 `OpenKeys/Piano` 设置的 `ui/language`，值为 `system`、`en` 或 `zh_CN`。通过 Language / 语言 修改后重启生效。`--language system|en|zh_CN` 只覆盖当前进程，不写入偏好。
+语言保存在现有 `OpenKeys/Piano` 设置的 `ui/language`，值为 `system`、`en` 或 `zh_CN`。通过 Language / 语言 修改后重启生效。`--language system|en|zh_CN` 只覆盖当前进程，不写入偏好。冒烟测试和截图会隔离设置。
 
 从当前构建重新生成双语预览：
 

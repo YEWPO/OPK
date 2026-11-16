@@ -3,6 +3,7 @@
 
 from collections import Counter
 import json
+import os
 from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
@@ -18,6 +19,29 @@ def check(condition, message):
 
 
 def main():
+    cmake = (PROJECT / "CMakeLists.txt").read_text(encoding="utf-8")
+    match = re.search(r"project\(OpenKeysPiano VERSION (\d+\.\d+\.\d+)\b", cmake)
+    check(match is not None, "Missing CMake project version")
+    version = match.group(1)
+    manifest = json.loads((PROJECT / "vcpkg.json").read_text(encoding="utf-8"))
+    check(manifest.get("version-string") == version, "CMake and vcpkg versions differ")
+    tag = f"v{version}"
+    if os.environ.get("GITHUB_REF_TYPE") == "tag":
+        check(os.environ.get("GITHUB_REF_NAME") == tag, "Git tag and project version differ")
+    notes = PROJECT / ".github/release-notes" / f"{tag}.md"
+    check(notes.is_file(), f"Missing release notes: {notes}")
+    release = notes.read_text(encoding="utf-8")
+    check(f"# OpenKeys Piano {version}\n" in release and
+          f"# OpenKeys Piano {version}（简体中文）" in release,
+          f"Release notes must include both languages: {notes}")
+    for extension in ("exe", "zip"):
+        check(f"OpenKeysPiano-{version}-Windows-AMD64.{extension}" in release,
+              f"Missing current release asset in {notes}: {extension}")
+    for name in ("README.md", "README.zh-CN.md"):
+        check(f"https://github.com/YEWPO/OPK/releases/tag/{tag}" in
+              (PROJECT / name).read_text(encoding="utf-8"),
+              f"Download link does not match current version: {name}")
+
     documents = [*PROJECT.glob("*.md"), *PROJECT.glob("docs/*.md")]
     for path in documents:
         chinese = path.name.endswith(".zh-CN.md")
@@ -130,7 +154,8 @@ def main():
             check(preview.size == (1200, 740), f"Unexpected preview dimensions: {name}: {preview.size}")
             previews.append(preview.tobytes())
     check(previews[0] != previews[1], "English and Chinese previews must differ")
-    print(f"Verified {len(documents)} documents, {len(catalog)} translations, 7 PNG sizes, ICO and both previews.")
+    print(f"Verified {tag} release metadata, {len(documents)} documents, {len(catalog)} translations, "
+          "7 PNG sizes, ICO and both previews.")
 
 
 if __name__ == "__main__":

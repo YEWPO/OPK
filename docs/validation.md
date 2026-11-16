@@ -13,18 +13,20 @@ The suite covers:
 
 - Held-key repeat suppression, release snapshots across transposition, latched sustain merged with custom pedal reference counts, velocity modifiers, out-of-range notes and keymap persistence.
 - Native recording roundtrip including Chinese titles, atomic save failure preservation, malformed events and pedal/note pairing.
-- EOP v200/v201/v301, layered notes, v201 zero-section containers, v200 dynamics, truncation and deterministic mutation stress.
+- EOP v200/v201/v301, layered notes and the 32/33-layer acceptance/rejection boundary, v201 zero-section containers, percentage dynamics, all 15 key-signature IDs and changes, signed pitch boundaries, hand assignments, truncation and deterministic mutation stress.
 - Audio-clock play/pause/resume/stop/restart and speed changes, queue overflow, actual FluidSynth loading/rendering with a generated SF2, panic and volume.
 - System-language fallback, saved preferences, installation-language initialization and user preference precedence, process-only language overrides, embedded translations, bilingual UI and offline guide links.
-- GUI import/error preservation, text-field typing isolation, emergency shortcut and startup without an audio device.
+- GUI import/error preservation, text-field typing isolation, emergency shortcut and startup without an audio device. Bilingual compact menus, evenly spaced performance controls, startup defaults, arrow-only controls, percentage velocities and playback seeking/configuration display are also covered.
 - Mouse playing on both keyboard regions: drag switching, black-key hit priority, releases outside the widget, focus/hide/grab cancellation, right-click editing, silent visual feedback and an embedded window icon. Physical/mouse source merging covers notes, sustain and velocity modifiers, both press/release orders, repeat suppression and paired recording events across transposition changes.
 - Managed SF2 copies: Unicode paths, persistence, duplicate imports, source deletion, replacement cleanup, invalid files, cancellation, write/configuration failure and malformed metadata recovery.
 - First-use guidance and the embedded offline tutorial, GUI import failure preservation, restart loading and explicit migration from legacy external paths.
 - Headless full-range/velocity sampler checks and PCM16 WAV output using generated fixtures. An optional `real_soundfont` integration test accepts `OPENKEYS_TEST_SOUNDFONT`; without a user-supplied bank it is explicitly skipped.
 
+Resource verification checks current project/manifest versions, README download links, bilingual release notes and the tag version on tag runs, as well as documentation links, translations, icons and previews. Screenshots come from the application without soundfonts or audio hardware.
+
 Local automated validation uses Linux with Qt 6.11.2, FluidSynth 2.6.1 and PortAudio 19. Test soundfonts are generated fixtures, not a claim that any third-party piano has passed listening tests. No instrument bank is required to build or distribute this application.
 
-AddressSanitizer and UndefinedBehaviorSanitizer checks use `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1`. LeakSanitizer cannot run in this environment's ptrace restrictions, so leak detection is not claimed. Windows CI automatically verifies silent installation, upgrade, shortcuts and uninstall. Physical output, interactive installer pages and DPI behavior still require real-machine acceptance.
+AddressSanitizer and UndefinedBehaviorSanitizer checks use `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1`. LeakSanitizer cannot run in this environment's ptrace restrictions, so leak detection is not claimed. Windows CI automatically verifies silent installation, upgrade, shortcuts and uninstall. The bilingual finish-page run checkbox is also exercised in its selected and unselected states. Physical output, complete visual installation checks and DPI behavior still require real-machine acceptance.
 
 Tag pushes run the same Linux and Windows checks. A release job runs only after both jobs succeed, downloads the verified Windows artifact, writes SHA-256 checksums, and publishes the GitHub Release. Publication therefore means the automated build, packaging, installer, shortcut and uninstall checks passed; it does not mean the pending Windows real-machine acceptance below has been completed.
 

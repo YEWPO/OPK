@@ -15,6 +15,7 @@ namespace {
 // Independently implemented from the documented EOP container format.
 // See docs/eop-compatibility.md for sources and deliberately unsupported semantics.
 constexpr qsizetype Header = 0x1b8;
+constexpr int MaxMappingLayers = 32;
 struct Reader {
     QByteArray data;
     void range(qsizetype p, qsizetype n) const {
@@ -109,12 +110,13 @@ Layer section(const Reader &r, qsizetype begin, qsizetype length, int stride) {
     }
     return {std::move(result), int(keyId), begin};
 }
-Layers prefixed(const Reader &r, qsizetype begin, qsizetype end, int stride) {
+Layers prefixed(const Reader &r, qsizetype begin, qsizetype end, int stride,
+                int maxLayers = MaxMappingLayers) {
     r.range(begin, end - begin);
     Layers result;
     int layers = 0;
     while (begin < end) {
-        if (++layers > 32 || end - begin < 4)
+        if (++layers > maxLayers || end - begin < 4)
             throw FileError("unsupported_layout",
                             QCoreApplication::translate("OpenKeys", "Invalid mapping layers"));
         const qsizetype length = r.u32(begin);
@@ -230,7 +232,8 @@ Song parseEop(const QByteArray &raw) {
                 try {
                     Layers candidate{section(r, start, length, 42)};
                     if (start + length < eventStart) {
-                        auto remaining = prefixed(r, start + length, eventStart, 42);
+                        // The unprefixed first section counts toward the same global limit.
+                        auto remaining = prefixed(r, start + length, eventStart, 42, MaxMappingLayers - 1);
                         candidate.insert(candidate.end(), remaining.begin(), remaining.end());
                     }
                     layers = std::move(candidate);

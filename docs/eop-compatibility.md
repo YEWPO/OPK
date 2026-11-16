@@ -45,11 +45,11 @@ Metadata is decoded as UTF-8, then GB18030 where supported. Metadata decoding do
 
 Interface language changes display text only, preserving file formats, error codes, configuration fields and user metadata.
 
-First release reads EOP only. Native recordings use versioned `.eopiano.json`; EOP export, EOPM, MusicXML, sheet-music engraving and screenshot/PDF interpretation are outside this importer.
+This release imports EOP and native recordings; it does not export EOP. Native recordings use versioned `.eopiano.json`; EOP export, EOPM, MusicXML, sheet-music engraving and screenshot/PDF interpretation are outside this importer.
 
 ## Validation status
 
-Tests build synthetic containers for each supported version, multi-layer maps, hand assignments and unknown values, the v201 zero-section variants, v200 dynamics, all 15 signature IDs, invalid IDs, signed pitch boundaries, enharmonic steps, bidirectional ID wrapping, independent layer changes, releases across key changes, malformed events, truncation, and 3,000 deterministic single-byte mutations. UI tests import synthetic EOP files and check both keyboard views during playback, pause, seeking, and replay, including assignments that contradict the live keymap. These exercise parser behavior but do not establish coverage across a real-world EOP corpus.
+Tests build synthetic containers for each supported version, multi-layer maps, the 32-layer limit for every supported layered layout, hand assignments and unknown values, the v201 zero-section variants, v200 dynamics, all 15 signature IDs, invalid IDs, signed pitch boundaries, enharmonic steps, bidirectional ID wrapping, independent layer changes, releases across key changes, malformed events, truncation, and 3,000 deterministic single-byte mutations. UI tests import synthetic EOP files and check both keyboard views during playback, pause, seeking, and replay, including assignments that contradict the live keymap. These exercise parser behavior but do not establish coverage across a real-world EOP corpus.
 
 Local checks use the user-supplied Flower Dance EOP corresponding to [this score](https://www.everyonepiano.cn/Music-15915.html): 3,772 events, duration 261,616,667 microseconds, initial C configuration, and opening left F3 / right E5. The supplied Hotarubi sample retains its initial Eb configuration and transition to F at approximately 155.882 seconds. These checks do not establish compatibility with every arrangement or container. Third-party scores, music and the reference installer are used locally only and are not included in this repository.
 
