@@ -276,8 +276,12 @@
     </message>
     <message>
         <location filename="../src/ui/main_window.cpp" line="610"/>
-        <source>Velocity (%)</source>
-        <translation>力度（%）</translation>
+        <source>Left Velocity (%)</source>
+        <translation>左手力度（%）</translation>
+    </message>
+    <message>
+        <source>Right Velocity (%)</source>
+        <translation>右手力度（%）</translation>
     </message>
     <message>
         <location filename="../src/ui/main_window.cpp" line="624"/>

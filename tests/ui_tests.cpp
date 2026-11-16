@@ -405,6 +405,56 @@ class UiTests : public QObject {
         scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum());
         QVERIFY(window.view_->visibleRegion().boundingRect().height() > 0);
     }
+    void performanceLayout_data() {
+        compactMenus_data();
+    }
+    void performanceLayout() {
+        QFETCH(QString, locale);
+        QVERIFY(language_.load(locale));
+        MainWindow window(true);
+        window.show();
+        auto *scroll = qobject_cast<QScrollArea *>(window.centralWidget());
+        QVERIFY(scroll);
+        auto *volume = window.findChild<QSlider *>("masterVolume");
+        QVERIFY(volume);
+        QVERIFY(volume->width() >= 120);
+        for (const int width : {980, 1200, 1600}) {
+            window.resize(width, 760);
+            QApplication::processEvents();
+            QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
+            QRect previous;
+            int previousFieldRight = 0;
+            int firstGap = -1;
+            for (const auto *name : {"transpose", "leftOctave", "leftVelocity", "rightOctave",
+                                     "rightVelocity", "masterVolume"}) {
+                auto *control = window.findChild<QWidget *>(QLatin1String(name));
+                QVERIFY(control);
+                auto *field = control->parentWidget();
+                auto *label = field->findChild<QLabel *>();
+                QVERIFY(label);
+                QVERIFY(label->width() >= label->sizeHint().width());
+                QVERIFY(label->geometry().bottom() < control->geometry().top());
+                QVERIFY2(control->width() >= control->sizeHint().width(),
+                         qPrintable(QString("%1: width %2, size hint %3")
+                                        .arg(QLatin1String(name))
+                                        .arg(control->width())
+                                        .arg(control->sizeHint().width())));
+                const QRect rect(control->mapTo(scroll->widget(), QPoint()), control->size());
+                if (!previous.isNull()) {
+                    QCOMPARE(rect.top(), previous.top());
+                    QCOMPARE(rect.height(), previous.height());
+                    // Fields can have different content widths, but their gaps must be uniform.
+                    const int gap = field->geometry().left() - previousFieldRight - 1;
+                    QVERIFY(gap >= 12);
+                    if (firstGap < 0)
+                        firstGap = gap;
+                    QVERIFY(std::abs(gap - firstGap) <= 1);
+                }
+                previous = rect;
+                previousFieldRight = field->geometry().right();
+            }
+        }
+    }
     void startupDefaults() {
         const auto directory = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
         QVERIFY(QDir().mkpath(directory));

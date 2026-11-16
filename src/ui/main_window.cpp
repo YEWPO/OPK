@@ -613,39 +613,44 @@ void MainWindow::buildUi() {
     });
     connect(save, &QAction::triggered, this, [this] { saveSong(); });
     connect(speed_, &QDoubleSpinBox::valueChanged, this, [this](double value) { audio_.setSpeed(value); });
-    auto *performance = new QHBoxLayout;
-    auto *keyGroup = new QGroupBox(QCoreApplication::translate("OpenKeys", "Performance Settings"));
-    auto *keyRow = new QGridLayout(keyGroup);
-    keyRow->setHorizontalSpacing(12);
-    keyRow->setColumnStretch(3, 1);
-    const auto field = [](const QString &name, QWidget *control) {
-        auto *group = new QWidget;
-        auto *layout = new QHBoxLayout(group);
+    auto *keyGroup = new QGroupBox(QCoreApplication::translate("OpenKeys", "Performance Settings"), central);
+    auto *keyRow = new QHBoxLayout(keyGroup);
+    keyRow->setContentsMargins(16, 12, 16, 12);
+    keyRow->setSpacing(12);
+    const auto addField = [keyRow](const QString &name, QWidget *control) {
+        auto *group = new QWidget(keyRow->parentWidget());
+        auto *layout = new QVBoxLayout(group);
         layout->setContentsMargins(0, 0, 0, 0);
-        layout->setSpacing(8);
+        layout->setSpacing(6);
         layout->setSizeConstraint(QLayout::SetFixedSize);
-        layout->addWidget(new QLabel(name));
-        control->setFixedWidth(control->sizeHint().width());
+        auto *label = new QLabel(name);
+        label->setObjectName("muted");
+        layout->addWidget(label);
         layout->addWidget(control);
-        return group;
+        control->ensurePolished();
+        control->setFixedWidth(std::max(control->minimumWidth(), control->sizeHint().width()));
+        if (keyRow->count() > 0)
+            keyRow->addStretch();
+        keyRow->addWidget(group, 0, Qt::AlignTop);
     };
     keyGroup->setToolTip(QCoreApplication::translate(
         "OpenKeys",
         "Key and octave changes affect new live notes only. Playback uses the pitches in the file."));
     auto *transpose = performanceSpin(-12, 12, keyboard_.keymap.transpose, PerformanceSpin::Key);
     transpose->setObjectName("transpose");
-    keyRow->addWidget(field(QCoreApplication::translate("OpenKeys", "Key"), transpose), 0, 0);
+    addField(QCoreApplication::translate("OpenKeys", "Key"), transpose);
     for (int hand = 0; hand < 2; ++hand) {
         auto *octave = performanceSpin(-3, 3, keyboard_.keymap.octave[size_t(hand)], PerformanceSpin::Octave);
         octave->setObjectName(hand == 0 ? "leftOctave" : "rightOctave");
-        keyRow->addWidget(field(hand == 0 ? QCoreApplication::translate("OpenKeys", "Left Octave")
-                                          : QCoreApplication::translate("OpenKeys", "Right Octave"),
-                                octave),
-                          hand, 1);
+        addField(hand == 0 ? QCoreApplication::translate("OpenKeys", "Left Octave")
+                           : QCoreApplication::translate("OpenKeys", "Right Octave"),
+                 octave);
         auto *velocity = performanceSpin(0, 100, velocityPercent(keyboard_.keymap.velocity[size_t(hand)]),
                                          PerformanceSpin::Number);
         velocity->setObjectName(hand == 0 ? "leftVelocity" : "rightVelocity");
-        keyRow->addWidget(field(QCoreApplication::translate("OpenKeys", "Velocity (%)"), velocity), hand, 2);
+        addField(hand == 0 ? QCoreApplication::translate("OpenKeys", "Left Velocity (%)")
+                           : QCoreApplication::translate("OpenKeys", "Right Velocity (%)"),
+                 velocity);
         connect(octave, &QSpinBox::valueChanged, this, [this, hand](int value) {
             keyboard_.keymap.octave[size_t(hand)] = value;
             updateProfile();
@@ -659,8 +664,19 @@ void MainWindow::buildUi() {
         keyboard_.keymap.transpose = value;
         updateProfile();
     });
-    performance->addWidget(keyGroup, 1);
-    root->addLayout(performance);
+    auto *volume = new QSlider(Qt::Horizontal);
+    volume->setObjectName("masterVolume");
+    volume->setRange(0, 100);
+    volume->setValue(settings_.value("volume", 80).toInt());
+    volume->setFixedWidth(120);
+    volume->setFixedHeight(transpose->sizeHint().height());
+    volume->setToolTip(QCoreApplication::translate("OpenKeys", "Master volume"));
+    addField(QCoreApplication::translate("OpenKeys", "Volume"), volume);
+    connect(volume, &QSlider::valueChanged, this, [this](int value) {
+        audio_.setVolume(value / 100.);
+        settings_.setValue("volume", value);
+    });
+    root->addWidget(keyGroup);
     view_ = new KeyboardView;
     view_->setObjectName("keyboardView");
     view_->map = keyboard_.keymap;
@@ -681,16 +697,6 @@ void MainWindow::buildUi() {
         dispatchLive(Event{0, down ? Kind::NoteOn : Kind::NoteOff, uint8_t(note), uint8_t(down ? 100 : 0),
                            Hand::Right, 0, 0});
     };
-    auto *volume = new QSlider(Qt::Horizontal);
-    volume->setRange(0, 100);
-    volume->setValue(settings_.value("volume", 80).toInt());
-    volume->setFixedWidth(120);
-    volume->setToolTip(QCoreApplication::translate("OpenKeys", "Master volume"));
-    keyRow->addWidget(field(QCoreApplication::translate("OpenKeys", "Volume"), volume), 1, 0);
-    connect(volume, &QSlider::valueChanged, this, [this](int value) {
-        audio_.setVolume(value / 100.);
-        settings_.setValue("volume", value);
-    });
     deviceLabel_ = new QLabel(QCoreApplication::translate("OpenKeys", "Audio has not started"));
     statusBar()->addPermanentWidget(deviceLabel_);
 }
