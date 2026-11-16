@@ -47,6 +47,7 @@ class KeyboardState {
   public:
     Keymap keymap = Keymap::defaults();
     std::vector<Event> change(uint16_t key, bool down, int64_t timeUs = 0);
+    std::vector<Event> setSustain(bool enabled, int64_t timeUs = 0);
     std::vector<Event> releaseAll(int64_t timeUs = 0);
     bool held(uint16_t key) const {
         return pressed_.contains(key);
@@ -56,5 +57,6 @@ class KeyboardState {
   private:
     std::map<uint16_t, std::vector<Event>> pressed_;
     std::array<int, 3> pedals_{};
+    bool sustain_ = false;
 };
 } // namespace piano

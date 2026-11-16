@@ -552,6 +552,7 @@ FunctionEnd
 @CPACK_NSIS_INSTALLER_MUI_WELCOMEFINISH_CODE@
 @CPACK_NSIS_INSTALLER_MUI_UNWELCOMEFINISH_CODE@
 @CPACK_NSIS_INSTALLER_MUI_FINISHPAGE_RUN_CODE@
+!define MUI_FINISHPAGE_RUN_TEXT "$(OpenKeysRunNow)"
 
 ;--------------------------------
 ;Pages
@@ -577,6 +578,8 @@ FunctionEnd
 ;Languages
   !insertmacro MUI_LANGUAGE "English"
   !insertmacro MUI_LANGUAGE "SimpChinese"
+  LangString OpenKeysRunNow ${LANG_ENGLISH} "Run OpenKeys Piano now"
+  LangString OpenKeysRunNow ${LANG_SIMPCHINESE} "立即运行 OpenKeys Piano"
   LangString OpenKeysInvalidLanguage ${LANG_ENGLISH} "Invalid /LANG value. Use 1033 (English) or 2052 (Simplified Chinese)."
   LangString OpenKeysInvalidLanguage ${LANG_SIMPCHINESE} "/LANG 参数无效，请使用 1033（英文）或 2052（简体中文）。"
   LangString OpenKeysBranding ${LANG_ENGLISH} "OpenKeys Piano Setup"

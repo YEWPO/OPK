@@ -91,8 +91,6 @@ int main(int argc, char **argv) {
         }
     }
     piano::MainWindow window(diagnostic);
-    if (parser.isSet("screenshot"))
-        window.resize(1200, 960);
     window.show();
     if (parser.isSet("soundfont"))
         window.loadFont(parser.value("soundfont"));

@@ -70,7 +70,7 @@ SF2 副本位于 `QStandardPaths::AppLocalDataLocation/soundfonts/`（Windows �
 
 启动仅加载元数据指向的已导入音源，没有随附或开发目录回退。旧 `QSettings` 外部路径只作为迁移提示，必须显式导入。采样率变化时重载副本，不再次导入。
 
-双语教程作为 Qt 资源嵌入 UI 库，也安装到 `docs/soundfont.md` 和 `docs/soundfont.zh-CN.md`。无需联网、特定工作目录或源码，教程内语言链接也支持离线跳转。
+音源与曲谱／录音双语教程作为 Qt 资源嵌入 UI 库，也安装到 `docs/soundfont.md`、`docs/soundfont.zh-CN.md`、`docs/performance.md` 和 `docs/performance.zh-CN.md`。无需联网、特定工作目录或源码，教程内语言链接也支持离线跳转。
 
 ## 可选音源诊断
 
@@ -106,3 +106,5 @@ python3 tools/generate_previews.py --executable /absolute/path/to/openkeys
 ```
 
 脚本固定 Fusion 样式、缩放、字体大小和初始窗口状态。`docs/preview.png` 为英文，`docs/preview.zh-CN.png` 为中文，均为真实截图。使用 `python3 tools/generate_icons.py` 从共享 SVG 重新生成全部 PNG 和 ICO；图标由 OKP 字标与深色圆角底上的象牙白琴键组成。提交前检查双语截图、所有尺寸图标与 SVG 的一致性。
+
+交互式安装完成页默认勾选“立即运行 OpenKeys Piano”，取消勾选后仅结束安装。静默安装不会启动应用。

@@ -81,7 +81,7 @@ const std::vector<PhysicalKey> &physicalKeys() {
             {0, "Fn", Qt::Key_unknown, 5, 1.25, 1},
             {347, "Win", Qt::Key_Meta, 5, 2.25, 1},
             {56, "Alt", Qt::Key_Alt, 5, 3.25, 1.25},
-            {57, QT_TRANSLATE_NOOP("OpenKeys", "Space · Sustain"), Qt::Key_Space, 5, 4.5, 6},
+            {57, "Space", Qt::Key_Space, 5, 4.5, 6},
             {312, "Alt", Qt::Key_AltGr, 5, 10.5, 1.25},
             {348, "Win", Qt::Key_Super_R, 5, 11.75, 1},
             {349, QT_TRANSLATE_NOOP("OpenKeys", "Menu"), Qt::Key_Menu, 5, 12.75, 1},
@@ -202,7 +202,6 @@ Keymap Keymap::defaults() {
     row({331, 336, 333, 328, 82, 83, 284}, 48, Hand::Right);
     row({79, 80, 81, 75, 76, 77, 71, 72, 73, 78, 69, 309, 55, 74}, 60, Hand::Right);
     row({339, 335, 337, 338, 327, 329}, 84, Hand::Right);
-    result.bindings[57] = {57, 0, Hand::Unknown, true};
     return result;
 }
 namespace {
@@ -335,12 +334,26 @@ std::vector<Event> KeyboardState::change(uint16_t key, bool down, int64_t time) 
     pressed_[key] = std::move(heldEvents);
     return out;
 }
+std::vector<Event> KeyboardState::setSustain(bool enabled, int64_t time) {
+    if (sustain_ == enabled)
+        return {};
+    sustain_ = enabled;
+    std::vector<Event> result;
+    for (size_t hand = 0; hand < pedals_.size(); ++hand) {
+        const bool changed = enabled ? pedals_[hand]++ == 0 : --pedals_[hand] == 0;
+        if (changed)
+            result.push_back(Event{time, Kind::Sustain, 0, uint8_t(enabled ? 127 : 0), Hand(hand)});
+    }
+    return result;
+}
 std::vector<Event> KeyboardState::releaseAll(int64_t time) {
     std::vector<Event> result;
     while (!pressed_.empty()) {
         auto events = change(pressed_.begin()->first, false, time);
         result.insert(result.end(), events.begin(), events.end());
     }
+    auto pedal = setSustain(false, time);
+    result.insert(result.end(), pedal.begin(), pedal.end());
     soft = false;
     hard = false;
     return result;

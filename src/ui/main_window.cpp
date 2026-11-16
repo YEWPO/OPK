@@ -15,6 +15,7 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFontDatabase>
 #include <QFormLayout>
 #include <QFrame>
 #include <QGridLayout>
@@ -172,17 +173,42 @@ template <typename Base> class ArrowOnlySpin : public Base {
 class PerformanceSpin : public ArrowOnlySpin<QSpinBox> {
   public:
     enum Display { Number, Key, Octave };
-    explicit PerformanceSpin(Display display) : display_(display) {}
+    explicit PerformanceSpin(Display display) : display_(display) {
+        setStyleSheet(styleSheet() + R"(
+            QSpinBox {font-size:12px;padding-right:18px;}
+            QSpinBox::up-button,QSpinBox::down-button {width:18px;}
+        )");
+        connect(this, &QSpinBox::valueChanged, this, [this] { refreshToolTip(); });
+    }
     QString displayText() const {
         return textFromValue(value());
+    }
+    void refreshToolTip() {
+        QString description = displayText();
+        if (display_ == Octave)
+            description = value() == 0 ? QCoreApplication::translate("OpenKeys", "Original")
+                          : value() > 0
+                              ? QCoreApplication::translate("OpenKeys", "Up %1 oct.").arg(value())
+                              : QCoreApplication::translate("OpenKeys", "Down %1 oct.").arg(-value());
+        if (display_ == Key) {
+            const int index = (value() % 12 + 12) % 12;
+            const int octave = (value() - index) / 12;
+            if (octave)
+                description = description.section(' ', 0, 0) +
+                              (octave > 0 ? QCoreApplication::translate("OpenKeys", " (1 octave up)")
+                                          : QCoreApplication::translate("OpenKeys", " (1 octave down)"));
+        }
+        setToolTip(description);
     }
     QSize sizeHint() const override {
         auto size = ArrowOnlySpin<QSpinBox>::sizeHint();
         int width = 0;
         for (int value = minimum(); value <= maximum(); ++value)
             width = std::max(width, fontMetrics().horizontalAdvance(textFromValue(value)));
-        // Include both stylesheet padding and the separate arrow column.
-        size.setWidth(std::max(size.width(), width + 72));
+        width = std::max(width,
+                         fontMetrics().horizontalAdvance(QCoreApplication::translate("OpenKeys", "Unknown")));
+        // Reserve room for the editor padding and compact arrow buttons.
+        size.setWidth(width + 44);
         return size;
     }
 
@@ -193,17 +219,11 @@ class PerformanceSpin : public ArrowOnlySpin<QSpinBox> {
             const int index = (value % 12 + 12) % 12;
             const int octave = (value - index) / 12;
             const auto name = QString::fromLatin1(names[index]);
-            return octave == 0
-                       ? name
-                       : name + (octave > 0 ? QCoreApplication::translate("OpenKeys", " (1 octave up)")
-                                            : QCoreApplication::translate("OpenKeys", " (1 octave down)"));
+            return octave == 0 ? name : name + (octave > 0 ? " (+1)" : " (-1)");
         }
         if (display_ == Octave)
-            return value == 0 ? QCoreApplication::translate("OpenKeys", "Original")
-                              : (value > 0 ? QCoreApplication::translate("OpenKeys", "Up %1 oct.")
-                                           : QCoreApplication::translate("OpenKeys", "Down %1 oct."))
-                                    .arg(std::abs(value));
-        return QSpinBox::textFromValue(value);
+            return (value > 0 ? "+" : "") + QString::number(value);
+        return QSpinBox::textFromValue(value) + "%";
     }
 
   private:
@@ -213,6 +233,7 @@ QSpinBox *performanceSpin(int lo, int hi, int value, PerformanceSpin::Display di
     auto *control = new PerformanceSpin(display);
     control->setRange(lo, hi);
     control->setValue(value);
+    control->refreshToolTip();
     return control;
 }
 void applyVisual(KeyboardView *view, const Event &e, bool playback) {
@@ -251,9 +272,17 @@ MainWindow::MainWindow(bool diagnostic, const QString &soundfontDirectory)
     if (!diagnostic_)
         QDir().mkpath(configDir);
     profilePath_ = configDir + "/keyboard.json";
+    bool migratedSpace = false;
     if (QFileInfo::exists(profilePath_))
         try {
             keyboard_.keymap = Keymap::read(profilePath_);
+            const auto space = keyboard_.keymap.bindings.find(57);
+            if (!settings_.value("input/spaceSustainMigrated", false).toBool() &&
+                space != keyboard_.keymap.bindings.end() && space->second.sustain &&
+                space->second.note == 0 && space->second.hand == Hand::Unknown) {
+                keyboard_.keymap.bindings.erase(space);
+                migratedSpace = true;
+            }
         } catch (const FileError &e) {
             statusBar()->showMessage(
                 QCoreApplication::translate("OpenKeys",
@@ -267,6 +296,8 @@ MainWindow::MainWindow(bool diagnostic, const QString &soundfontDirectory)
     config_.frames = settings_.value("audio/frames", 256).toInt();
     config_.exclusive = settings_.value("audio/exclusive", false).toBool();
     buildUi();
+    if ((!migratedSpace || updateProfile()) && !diagnostic_)
+        settings_.setValue("input/spaceSustainMigrated", true);
     input_ = std::make_unique<InputRouter>(this);
     input_->keyChanged = [this](uint16_t code, bool down) { key(code, down); };
     input_->isBound = [this](uint16_t code) { return keyboard_.keymap.bindings.contains(code); };
@@ -338,8 +369,9 @@ MainWindow::MainWindow(bool diagnostic, const QString &soundfontDirectory)
                 legacyFontPath_ = settings_.value("soundfont").toString();
                 statusBar()->showMessage(
                     importedInfo_.id.isEmpty() && legacyFontPath_.isEmpty()
-                        ? QCoreApplication::translate(
-                              "OpenKeys", "Choose Import Soundfont to begin. The Import Guide works offline.")
+                        ? QCoreApplication::translate("OpenKeys",
+                                                      "Choose Soundfont > Import / Replace Soundfont to "
+                                                      "begin. Help > Soundfont Import Guide works offline.")
                         : QCoreApplication::translate(
                               "OpenKeys",
                               "Please import your soundfont again to save a working application copy."));
@@ -368,9 +400,18 @@ MainWindow::~MainWindow() {
     }
 }
 void MainWindow::buildUi() {
-    setStyleSheet(R"(
+    const auto fonts = QFontDatabase::families();
+    QString fontFamily = QFontDatabase::systemFont(QFontDatabase::GeneralFont).family();
+    for (const auto *preferred : {"Noto Sans CJK SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI"})
+        if (fonts.contains(QLatin1String(preferred), Qt::CaseInsensitive)) {
+            fontFamily = QLatin1String(preferred);
+            break;
+        }
+    // Resolve an installed family explicitly: older Qt Windows builds can use
+    // missing-glyph metrics for the first unavailable family in a stylesheet list.
+    setStyleSheet(QString::fromUtf8(R"(
         QMainWindow,QDialog,QWidget#mainContent,QScrollArea {background:#0d141d;color:#e6edf5;}
-        QWidget {font-family:"Noto Sans CJK SC","Microsoft YaHei UI",sans-serif;font-size:13px;color:#e6edf5;}
+        QWidget {font-family:"%1";font-size:13px;color:#e6edf5;}
         QLabel#muted {color:#8493a8;}
         QFrame#card,QGroupBox {background:#141e2b;border:1px solid #2b394b;border-radius:10px;}
         QGroupBox {margin-top:7px;padding-top:10px;}
@@ -413,7 +454,8 @@ void MainWindow::buildUi() {
         QSlider::handle:horizontal {background:#83dfc1;width:12px;margin:-4px 0;border-radius:6px;}
         QStatusBar {background:#101824;color:#93a4bc;}
         QToolTip {background:#263449;color:white;border:1px solid #354761;}
-    )");
+    )")
+                      .arg(fontFamily));
     auto *central = new QWidget;
     central->setObjectName("mainContent");
     auto *root = new QVBoxLayout(central);
@@ -495,9 +537,13 @@ void MainWindow::buildUi() {
                       "OpenKeys", "Could not save the language setting. Check configuration permissions."));
     });
     auto *helpMenu = menu(QCoreApplication::translate("OpenKeys", "Help"));
-    auto *guide = helpMenu->addAction(QCoreApplication::translate("OpenKeys", "Import Guide"));
+    auto *guide = helpMenu->addAction(QCoreApplication::translate("OpenKeys", "Soundfont Import Guide"));
     guide->setObjectName("soundfontGuide");
-    connect(guide, &QAction::triggered, this, [this] { showSoundfontGuide(); });
+    connect(guide, &QAction::triggered, this, [this] { showGuide(true); });
+    auto *performanceGuide =
+        helpMenu->addAction(QCoreApplication::translate("OpenKeys", "EOP / Recording Guide"));
+    performanceGuide->setObjectName("performanceGuide");
+    connect(performanceGuide, &QAction::triggered, this, [this] { showGuide(false); });
     auto *about = helpMenu->addAction(QCoreApplication::translate("OpenKeys", "About"));
     connect(about, &QAction::triggered, this, [this] {
         releaseHeld();
@@ -614,6 +660,7 @@ void MainWindow::buildUi() {
     connect(save, &QAction::triggered, this, [this] { saveSong(); });
     connect(speed_, &QDoubleSpinBox::valueChanged, this, [this](double value) { audio_.setSpeed(value); });
     auto *keyGroup = new QGroupBox(QCoreApplication::translate("OpenKeys", "Performance Settings"), central);
+    keyGroup->setObjectName("performanceSettings");
     auto *keyRow = new QHBoxLayout(keyGroup);
     keyRow->setContentsMargins(16, 12, 16, 12);
     keyRow->setSpacing(12);
@@ -625,6 +672,7 @@ void MainWindow::buildUi() {
         layout->setSizeConstraint(QLayout::SetFixedSize);
         auto *label = new QLabel(name);
         label->setObjectName("muted");
+        label->setBuddy(control);
         layout->addWidget(label);
         layout->addWidget(control);
         control->ensurePolished();
@@ -663,6 +711,20 @@ void MainWindow::buildUi() {
     connect(transpose, &QSpinBox::valueChanged, this, [this](int value) {
         keyboard_.keymap.transpose = value;
         updateProfile();
+    });
+    sustain_ = new QCheckBox;
+    sustain_->setObjectName("liveSustain");
+    sustain_->setAccessibleName(QCoreApplication::translate("OpenKeys", "Sustain"));
+    sustain_->setFocusPolicy(Qt::NoFocus);
+    sustain_->setFixedHeight(transpose->sizeHint().height());
+    sustain_->setToolTip(QCoreApplication::translate(
+        "OpenKeys",
+        "Keep sustain on for live playing. Included in recordings; file playback uses its own sustain."));
+    addField(QCoreApplication::translate("OpenKeys", "Sustain"), sustain_);
+    connect(sustain_, &QCheckBox::toggled, this, [this](bool enabled) {
+        for (const auto &event : keyboard_.setSustain(enabled))
+            dispatchLive(event);
+        view_->setFocus();
     });
     auto *volume = new QSlider(Qt::Horizontal);
     volume->setObjectName("masterVolume");
@@ -731,6 +793,9 @@ void MainWindow::key(uint16_t code, bool down, KeySource source) {
         dispatchLive(e);
 }
 void MainWindow::dispatchLive(const Event &input) {
+    if (input.kind == Kind::NoteOn)
+        for (const auto &event : keyboard_.setSustain(sustain_->isChecked()))
+            dispatchLive(event);
     auto event = input;
     event.source = 0;
     audio_.send(event);
@@ -773,6 +838,8 @@ void MainWindow::releaseHeld() {
     audio_.releaseLive();
 }
 void MainWindow::emergencyStop() {
+    const QSignalBlocker block(sustain_);
+    sustain_->setChecked(false);
     if (recordingActive_)
         finishRecord();
     else
@@ -849,6 +916,9 @@ void MainWindow::toggleRecord() {
     }
     if (!maybeSave())
         return;
+    startRecording();
+}
+void MainWindow::startRecording() {
     releaseHeld();
     playbackConfiguration_ = false;
     cancelSeekDrag();
@@ -860,6 +930,11 @@ void MainWindow::toggleRecord() {
     recording_.title = QCoreApplication::translate("OpenKeys", "Untitled Recording");
     recordingActive_ = true;
     recordingClock_.start();
+    // Seed the recording at exactly zero, after setSong has reset the live channels.
+    for (const auto &event : keyboard_.setSustain(sustain_->isChecked())) {
+        recording_.events.push_back(event);
+        audio_.send(event);
+    }
     titleLabel_->setText(QCoreApplication::translate("OpenKeys", "Recording"));
     recordButton_->setText(QCoreApplication::translate("OpenKeys", "■ Finish Recording"));
     recordButton_->setProperty("active", true);
@@ -943,15 +1018,16 @@ void MainWindow::chooseSoundfont() {
     if (!path.isEmpty())
         loadFont(path);
 }
-void MainWindow::showSoundfontGuide() {
+void MainWindow::showGuide(bool soundfont) {
     releaseHeld();
     QDialog dialog(this);
-    dialog.setObjectName("soundfontGuideDialog");
-    dialog.setWindowTitle(QCoreApplication::translate("OpenKeys", "Soundfont Import Guide"));
+    dialog.setObjectName(soundfont ? "soundfontGuideDialog" : "performanceGuideDialog");
+    dialog.setWindowTitle(soundfont ? QCoreApplication::translate("OpenKeys", "Soundfont Import Guide")
+                                    : QCoreApplication::translate("OpenKeys", "EOP / Recording Guide"));
     dialog.resize(800, 640);
     auto *layout = new QVBoxLayout(&dialog);
     auto *browser = new QTextBrowser;
-    browser->setObjectName("soundfontGuideContent");
+    browser->setObjectName(soundfont ? "soundfontGuideContent" : "performanceGuideContent");
     browser->setStyleSheet(
         "QTextBrowser {background:#111923;color:#e6edf5;border:1px solid #354761;padding:12px;}");
     auto palette = browser->palette();
@@ -961,17 +1037,19 @@ void MainWindow::showSoundfontGuide() {
     connect(browser, &QTextBrowser::anchorClicked, &dialog, [browser](const QUrl &link) {
         if (link.scheme() == "https")
             QDesktopServices::openUrl(link);
-        else if (link.fileName() == "soundfont.md" || link.fileName() == "soundfont.zh-CN.md")
+        else if (link.fileName() == "soundfont.md" || link.fileName() == "soundfont.zh-CN.md" ||
+                 link.fileName() == "performance.md" || link.fileName() == "performance.zh-CN.md")
             browser->setSource(QUrl("qrc:/docs/" + link.fileName()), QTextDocument::MarkdownResource);
         else if (link.isRelative() && link.hasFragment())
             browser->scrollToAnchor(link.fragment());
     });
     const auto guidePath =
-        Language::current() == "zh_CN" ? "qrc:/docs/soundfont.zh-CN.md" : "qrc:/docs/soundfont.md";
+        QString("qrc:/docs/%1%2.md")
+            .arg(soundfont ? "soundfont" : "performance", Language::current() == "zh_CN" ? ".zh-CN" : "");
     browser->setSource(QUrl(guidePath), QTextDocument::MarkdownResource);
     if (browser->toPlainText().isEmpty())
         browser->setPlainText(QCoreApplication::translate(
-            "OpenKeys", "Could not read the guide. See soundfont.md in the installed docs directory."));
+            "OpenKeys", "Could not read the guide. See the installed docs directory."));
     layout->addWidget(browser);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
@@ -1110,6 +1188,9 @@ void MainWindow::syncPerformance(int64_t positionUs) {
         // Force refresh even when restoring a value equal to the previous one.
         edit->setText(config && !value ? QCoreApplication::translate("OpenKeys", "Unknown")
                                        : static_cast<PerformanceSpin *>(control)->displayText());
+        static_cast<PerformanceSpin *>(control)->refreshToolTip();
+        if (config && !value)
+            control->setToolTip(QCoreApplication::translate("OpenKeys", "Unknown"));
     };
     sync("transpose", config ? std::optional<int>(config->transpose) : std::nullopt,
          keyboard_.keymap.transpose);
@@ -1395,6 +1476,7 @@ void MainWindow::profileSettings() {
         auto *control = findChild<QSpinBox *>(QLatin1String(name));
         QSignalBlocker block(control);
         control->setValue(value);
+        static_cast<PerformanceSpin *>(control)->refreshToolTip();
     };
     sync("transpose", keyboard_.keymap.transpose);
     sync("leftOctave", keyboard_.keymap.octave[0]);
@@ -1403,7 +1485,7 @@ void MainWindow::profileSettings() {
     sync("rightVelocity", velocityPercent(keyboard_.keymap.velocity[1]));
     view_->setFocus();
 }
-void MainWindow::updateProfile() {
+bool MainWindow::updateProfile() {
     view_->map = keyboard_.keymap;
     view_->update();
     if (!diagnostic_)
@@ -1413,7 +1495,9 @@ void MainWindow::updateProfile() {
             statusBar()->showMessage(
                 QCoreApplication::translate("OpenKeys", "Keymap settings were not saved: %1").arg(e.what()),
                 10000);
+            return false;
         }
+    return true;
 }
 void MainWindow::showError(const QString &title, const QString &detail) {
     releaseHeld();

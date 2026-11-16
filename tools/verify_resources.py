@@ -127,7 +127,7 @@ def main():
     previews = []
     for name in ["preview.png", "preview.zh-CN.png"]:
         with Image.open(PROJECT / "docs" / name) as preview:
-            check(preview.size == (1200, 960), f"Unexpected preview dimensions: {name}: {preview.size}")
+            check(preview.size == (1200, 740), f"Unexpected preview dimensions: {name}: {preview.size}")
             previews.append(preview.tobytes())
     check(previews[0] != previews[1], "English and Chinese previews must differ")
     print(f"Verified {len(documents)} documents, {len(catalog)} translations, 7 PNG sizes, ICO and both previews.")

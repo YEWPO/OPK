@@ -6,6 +6,7 @@
 #include <QAbstractItemView>
 #include <QActionGroup>
 #include <QApplication>
+#include <QCheckBox>
 #include <QClipboard>
 #include <QComboBox>
 #include <QDialog>
@@ -15,6 +16,8 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFontDatabase>
+#include <QGroupBox>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
@@ -88,6 +91,10 @@ class UiTests : public QObject {
     Q_OBJECT
     Language language_;
   private slots:
+    void initTestCase() {
+        QVERIFY2(!QFontDatabase::families().isEmpty(),
+                 "UI tests require real fonts, not placeholder metrics.");
+    }
     void init() {
         QVERIFY(language_.load("zh_CN"));
     }
@@ -321,7 +328,7 @@ class UiTests : public QObject {
         QCOMPARE(window.findChild<QLabel *>("soundfontStatus")->text(),
                  "○ Import a soundfont to start playing");
         QCOMPARE(window.findChild<QAction *>("demoSong")->text(), "Demo");
-        QCOMPARE(window.findChild<QSpinBox *>("leftOctave")->text(), "Original");
+        QCOMPARE(window.findChild<QSpinBox *>("leftOctave")->text(), "0");
         auto *language = window.findChild<QActionGroup *>("languageChoice");
         QVERIFY(language);
         QSettings settings("OpenKeys", "Piano");
@@ -374,6 +381,21 @@ class UiTests : public QObject {
         QApplication::processEvents();
         auto *scroll = qobject_cast<QScrollArea *>(window.centralWidget());
         QVERIFY(scroll);
+        const auto describeOverflow = [&] {
+            if (scroll->horizontalScrollBar()->maximum() == 0)
+                return;
+            auto *group = window.findChild<QGroupBox *>("performanceSettings");
+            qInfo() << "Performance layout:" << group->size() << group->minimumSizeHint();
+            for (auto *control : group->findChildren<QWidget *>()) {
+                if (control->objectName().isEmpty() && !qobject_cast<QLabel *>(control))
+                    continue;
+                qInfo() << control->metaObject()->className() << control->objectName() << control->size()
+                        << control->minimumSizeHint() << control->font().toString();
+                if (auto *label = qobject_cast<QLabel *>(control))
+                    qInfo() << label->text();
+            }
+        };
+        describeOverflow();
         QCOMPARE(scroll->verticalScrollBar()->maximum(), 0);
         QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
         QCOMPARE(window.menuBar()->actions().size(), 5);
@@ -401,7 +423,48 @@ class UiTests : public QObject {
         QVERIFY(!window.background_->isChecked());
         window.resize(980, 640);
         QApplication::processEvents();
-        QVERIFY(scroll->verticalScrollBar()->maximum() > 0);
+        describeOverflow();
+        QCOMPARE(window.size(), QSize(980, 640));
+        QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
+        auto *group = window.findChild<QGroupBox *>("performanceSettings");
+        QVERIFY(group);
+        int center = -1;
+        QRect previous;
+        for (const auto *name : {"transpose", "leftOctave", "leftVelocity", "rightOctave", "rightVelocity",
+                                 "liveSustain", "masterVolume"}) {
+            auto *control = group->findChild<QWidget *>(name);
+            QVERIFY(control);
+            const QRect bounds(control->mapTo(group, QPoint(0, 0)), control->size());
+            QVERIFY(group->rect().contains(bounds));
+            if (center < 0)
+                center = bounds.center().y();
+            QVERIFY(std::abs(bounds.center().y() - center) <= 1);
+            QVERIFY(previous.isNull() || bounds.left() > previous.right());
+            previous = bounds;
+            if (auto *spin = qobject_cast<QSpinBox *>(control)) {
+                const auto *edit = spin->findChild<QLineEdit *>();
+                QVERIFY(edit);
+                for (const int value : {spin->minimum(), spin->maximum()}) {
+                    spin->setValue(value);
+                    QVERIFY(edit->fontMetrics().horizontalAdvance(spin->text()) <= edit->width());
+                    QVERIFY(!spin->toolTip().isEmpty());
+                }
+            }
+        }
+        Song unknown;
+        unknown.events = {{0, Kind::NoteOn, 60, 80}, {1000000, Kind::NoteOff, 60, 0}};
+        unknown.configurations = {PerformanceConfig{}};
+        window.setSong(unknown);
+        window.playbackConfiguration_ = true;
+        window.syncPerformance(0);
+        for (const auto *name : {"leftOctave", "rightOctave", "leftVelocity", "rightVelocity"}) {
+            const auto *control = window.findChild<QSpinBox *>(name);
+            const auto *edit = control->findChild<QLineEdit *>();
+            const auto text = QCoreApplication::translate("OpenKeys", "Unknown");
+            QCOMPARE(control->text(), text);
+            QCOMPARE(control->toolTip(), text);
+            QVERIFY(edit->fontMetrics().horizontalAdvance(text) <= edit->width());
+        }
         scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum());
         QVERIFY(window.view_->visibleRegion().boundingRect().height() > 0);
     }
@@ -426,7 +489,7 @@ class UiTests : public QObject {
             int previousFieldRight = 0;
             int firstGap = -1;
             for (const auto *name : {"transpose", "leftOctave", "leftVelocity", "rightOctave",
-                                     "rightVelocity", "masterVolume"}) {
+                                     "rightVelocity", "liveSustain", "masterVolume"}) {
                 auto *control = window.findChild<QWidget *>(QLatin1String(name));
                 QVERIFY(control);
                 auto *field = control->parentWidget();
@@ -456,6 +519,15 @@ class UiTests : public QObject {
         }
     }
     void startupDefaults() {
+        QSettings settings("OpenKeys", "Piano");
+        const auto migrated = settings.value("input/spaceSustainMigrated");
+        settings.remove("input/spaceSustainMigrated");
+        const auto restoreMigration = qScopeGuard([&] {
+            if (migrated.isValid())
+                settings.setValue("input/spaceSustainMigrated", migrated);
+            else
+                settings.remove("input/spaceSustainMigrated");
+        });
         const auto directory = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
         QVERIFY(QDir().mkpath(directory));
         const auto path = directory + "/keyboard.json";
@@ -481,6 +553,8 @@ class UiTests : public QObject {
         map.octave = {-1, 2};
         map.velocity = {65, 90};
         map.bindings[30].note = 61;
+        map.bindings[57] = {57, 0, Hand::Unknown, true};
+        map.bindings[58] = {58, 0, Hand::Unknown, true};
         map.save(path);
         {
             MainWindow window(true);
@@ -493,9 +567,16 @@ class UiTests : public QObject {
             QCOMPARE(window.findChild<QSpinBox *>("leftVelocity")->value(), 80);
             QCOMPARE(window.findChild<QSpinBox *>("rightVelocity")->value(), 100);
             QCOMPARE(view->map.bindings.at(30).note, 61);
+            QVERIFY(!view->map.bindings.contains(57));
+            QVERIFY(view->map.bindings.at(58).sustain);
             QCOMPARE(window.findChild<QSpinBox *>("transpose")->text(), QStringLiteral("C"));
-            QCOMPARE(window.findChild<QSpinBox *>("leftOctave")->text(), QStringLiteral("原音区"));
-            QCOMPARE(window.findChild<QSpinBox *>("rightOctave")->text(), QStringLiteral("原音区"));
+            QCOMPARE(window.findChild<QSpinBox *>("leftOctave")->text(), QStringLiteral("0"));
+            QCOMPARE(window.findChild<QSpinBox *>("rightOctave")->text(), QStringLiteral("0"));
+        }
+        settings.setValue("input/spaceSustainMigrated", true);
+        {
+            MainWindow customPedal(true);
+            QVERIFY(customPedal.keyboard_.keymap.bindings.at(57).sustain);
         }
         QFile::remove(path);
         MainWindow firstLaunch(true);
@@ -723,6 +804,166 @@ class UiTests : public QObject {
         });
         window.findChild<QAction *>("soundfontGuide")->trigger();
         QVERIFY(found);
+    }
+    void performanceGuide_data() {
+        QTest::addColumn<QString>("locale");
+        QTest::newRow("en") << QString("en");
+        QTest::newRow("zh") << QString("zh_CN");
+    }
+    void performanceGuide() {
+        QFETCH(QString, locale);
+        QVERIFY(language_.load(locale));
+        MainWindow window(true);
+        const QString title = locale == "en" ? "EOP / Recording Guide" : QStringLiteral("曲谱／录音打开教程");
+        auto *action = window.findChild<QAction *>("performanceGuide");
+        QCOMPARE(action->text(), title);
+        bool checked = false;
+        QTimer::singleShot(0, &window, [&] {
+            auto *dialog = window.findChild<QDialog *>("performanceGuideDialog");
+            QVERIFY(dialog);
+            const auto close = qScopeGuard([&] { dialog->accept(); });
+            QCOMPARE(dialog->windowTitle(), title);
+            auto *browser = dialog->findChild<QTextBrowser *>("performanceGuideContent");
+            QVERIFY(browser);
+            QVERIFY(browser->toPlainText().contains(title));
+            QVERIFY(browser->toPlainText().contains(".eopiano.json"));
+            QVERIFY(browser->toPlainText().contains("PDF"));
+            QVERIFY(!browser->openLinks());
+            for (const auto *name :
+                 {"performance.md", "performance.zh-CN.md", "soundfont.md", "soundfont.zh-CN.md"}) {
+                QVERIFY(QMetaObject::invokeMethod(browser, "anchorClicked", Q_ARG(QUrl, QUrl(name))));
+                QVERIFY(browser->source().path().endsWith(name));
+                QVERIFY(!browser->toPlainText().isEmpty());
+            }
+            checked = true;
+        });
+        action->trigger();
+        QVERIFY(checked);
+    }
+    void liveSustainRecording_data() {
+        QTest::addColumn<bool>("initial");
+        QTest::newRow("enabled-before-recording") << true;
+        QTest::newRow("enabled-during-recording") << false;
+    }
+    void liveSustainRecording() {
+        QFETCH(bool, initial);
+        MainWindow window(true);
+        window.timer_.stop();
+        auto *sustain = window.findChild<QCheckBox *>("liveSustain");
+        QVERIFY(sustain);
+        QVERIFY(!sustain->isChecked());
+        QVERIFY(!window.keyboard_.keymap.bindings.contains(57));
+        sustain->setChecked(initial);
+        window.startRecording(); // Same recording path, without a hardware audio device.
+        if (initial) {
+            QCOMPARE(window.recording_.events.size(), size_t(3));
+            for (const auto &event : window.recording_.events) {
+                QCOMPARE(event.kind, Kind::Sustain);
+                QCOMPARE(event.timeUs, int64_t(0));
+                QCOMPARE(event.velocity, 127);
+            }
+        } else {
+            QVERIFY(window.recording_.events.empty());
+            sustain->click();
+        }
+        const auto note = [&](bool down) {
+            for (const auto &event : window.keyboard_.change(30, down))
+                window.dispatchLive(event);
+        };
+        note(true);
+        note(false);
+        window.releaseHeld();
+        QVERIFY(sustain->isChecked());
+        const auto beforeResume = window.recording_.events.size();
+        note(true); // Restore sustain before the new note after suspension.
+        QCOMPARE(window.recording_.events.size(), beforeResume + 4);
+        QCOMPARE(window.recording_.events[beforeResume].kind, Kind::Sustain);
+        QCOMPARE(window.recording_.events[beforeResume].velocity, 127);
+        // A direct piano note goes through the same live dispatcher.
+        window.dispatchLive(Event{0, Kind::NoteOn, 72, 100, Hand::Right});
+        window.dispatchLive(Event{0, Kind::NoteOff, 72, 0, Hand::Right});
+        QTest::qWait(2);
+        window.finishRecord(); // Also releases the held computer key and pedal.
+        QVERIFY(!window.recordingActive_);
+        QVERIFY(sustain->isChecked());
+        validateSong(window.song_);
+        QTemporaryDir directory;
+        const auto path = directory.filePath(QStringLiteral("延音.eopiano.json"));
+        saveRecording(path, window.song_);
+        const auto restored = readSong(path);
+        QCOMPARE(restored.events.size(), window.song_.events.size());
+        for (size_t i = 0; i < restored.events.size(); ++i) {
+            QCOMPARE(restored.events[i].kind, window.song_.events[i].kind);
+            QCOMPARE(restored.events[i].velocity, window.song_.events[i].velocity);
+        }
+        // File configuration must not disable or overwrite the live switch.
+        window.setSong(parseEop(fixture::changingKeyEop()));
+        window.startPlayback();
+        QVERIFY(sustain->isEnabled());
+        QVERIFY(sustain->isChecked());
+        sustain->setChecked(false);
+        QVERIFY(!sustain->isChecked());
+        window.setSong({});
+        note(true);
+        window.releaseHeld();
+        sustain->setChecked(true);
+        window.emergencyStop();
+        QVERIFY(!sustain->isChecked());
+        QVERIFY(window.keyboard_.releaseAll().empty());
+        MainWindow nextLaunch(true);
+        QVERIFY(!nextLaunch.sustain_->isChecked());
+    }
+    void liveSustainSoundAndPlaybackIsolation() {
+        QTemporaryDir directory;
+        const auto path = directory.filePath("test.sf2");
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(fixture::testSoundfont());
+        file.close();
+        auto loaded = AudioEngine::loadSoundfont(path);
+        QVERIFY(loaded.font);
+        MainWindow window(true);
+        window.timer_.stop();
+        window.audio_.setSoundfont(loaded.font);
+        std::vector<float> samples(24000 * 2);
+        const auto tailEnergy = [&] {
+            double energy = 0;
+            for (size_t i = samples.size() - 4096; i < samples.size(); ++i)
+                energy += double(samples[i]) * samples[i];
+            return energy;
+        };
+        window.sustain_->click();
+        window.dispatchLive(Event{0, Kind::NoteOn, 69, 110, Hand::Right});
+        window.audio_.render(samples.data(), 4800);
+        window.dispatchLive(Event{0, Kind::NoteOff, 69, 0, Hand::Right});
+        window.audio_.render(samples.data(), 24000);
+        QVERIFY(tailEnergy() > .01);
+        window.sustain_->click();
+        window.audio_.render(samples.data(), 24000);
+        QVERIFY(tailEnergy() < .0001);
+        window.sustain_->click();
+        window.releaseHeld();
+        window.dispatchLive(Event{0, Kind::NoteOn, 69, 110, Hand::Left});
+        window.audio_.render(samples.data(), 4800);
+        window.dispatchLive(Event{0, Kind::NoteOff, 69, 0, Hand::Left});
+        window.audio_.render(samples.data(), 24000);
+        QVERIFY(tailEnergy() > .01); // Reapplied after the live channels were cleared.
+
+        Song song;
+        song.events = {{0, Kind::NoteOn, 69, 110, Hand::Right}, {100000, Kind::NoteOff, 69, 0, Hand::Right}};
+        window.setSong(song);
+        window.startPlayback();
+        window.sustain_->click();
+        window.sustain_->click();
+        window.audio_.render(samples.data(), 24000);
+        QVERIFY(tailEnergy() < .0001); // Live sustain cannot lengthen a file's notes.
+        song.events.insert(song.events.begin(), Event{0, Kind::Sustain, 0, 127, Hand::Right});
+        song.events.push_back(Event{1000000, Kind::Sustain, 0, 0, Hand::Right});
+        window.setSong(song);
+        window.sustain_->setChecked(false);
+        window.startPlayback();
+        window.audio_.render(samples.data(), 24000);
+        QVERIFY(tailEnergy() > .01); // A file's pedal works with the live switch off.
     }
     void importsPersistsAndRestoresCopy() {
         QTemporaryDir dir;
@@ -1104,25 +1345,25 @@ class UiTests : public QObject {
         QCOMPARE(transpose->text(), QStringLiteral("Eb"));
         QCOMPARE(keyboardView(window)->map.transpose, 3);
         transpose->setValue(-1);
-        QCOMPARE(transpose->text(), QStringLiteral("B（低 1 个八度）"));
+        QCOMPARE(transpose->text(), QStringLiteral("B (-1)"));
         transpose->setValue(12);
-        QCOMPARE(transpose->text(), QStringLiteral("C（高 1 个八度）"));
+        QCOMPARE(transpose->text(), QStringLiteral("C (+1)"));
         clickStep(transpose, true);
         QCOMPARE(transpose->value(), 12);
         transpose->setValue(-12);
-        QCOMPARE(transpose->text(), QStringLiteral("C（低 1 个八度）"));
+        QCOMPARE(transpose->text(), QStringLiteral("C (-1)"));
         clickStep(transpose, false);
         QCOMPARE(transpose->value(), -12);
         for (const char *name : {"leftOctave", "rightOctave"}) {
             auto *control = window.findChild<QSpinBox *>(QLatin1String(name));
             QVERIFY(control);
             control->setValue(0);
-            QCOMPARE(control->text(), QStringLiteral("原音区"));
+            QCOMPARE(control->text(), QStringLiteral("0"));
             clickStep(control, true);
-            QCOMPARE(control->text(), QStringLiteral("升高 1 个八度"));
+            QCOMPARE(control->text(), QStringLiteral("+1"));
             clickStep(control, false);
             clickStep(control, false);
-            QCOMPARE(control->text(), QStringLiteral("降低 1 个八度"));
+            QCOMPARE(control->text(), QStringLiteral("-1"));
         }
         for (auto *control : window.findChildren<QAbstractSpinBox *>()) {
             auto *editor = control->findChild<QLineEdit *>();
@@ -1173,8 +1414,8 @@ class UiTests : public QObject {
         });
         window.findChild<QAction *>("keymapSettings")->trigger();
         QCOMPARE(transpose->text(), QStringLiteral("C"));
-        QCOMPARE(window.findChild<QSpinBox *>("leftOctave")->text(), QStringLiteral("原音区"));
-        QCOMPARE(window.findChild<QSpinBox *>("rightOctave")->text(), QStringLiteral("原音区"));
+        QCOMPARE(window.findChild<QSpinBox *>("leftOctave")->text(), QStringLiteral("0"));
+        QCOMPARE(window.findChild<QSpinBox *>("rightOctave")->text(), QStringLiteral("0"));
         QCOMPARE(keyboardView(window)->map.transpose, 0);
     }
     void importEopAndChangeTranspose() {
@@ -1240,6 +1481,18 @@ class UiTests : public QObject {
 };
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
+#ifdef Q_OS_WIN
+    // FreeType's directory scan does not include .ttc files. Add the installed
+    // Chinese collections explicitly so offscreen checks also use real CJK text.
+    if (QGuiApplication::platformName() == "offscreen") {
+        const QDir fonts(qEnvironmentVariable("SystemRoot") + "/Fonts");
+        for (const auto *name : {"msyh.ttc", "msyhbd.ttc", "msjh.ttc"}) {
+            const auto path = fonts.filePath(QLatin1String(name));
+            if (QFileInfo::exists(path) && QFontDatabase::addApplicationFont(path) < 0)
+                return 2;
+        }
+    }
+#endif
     QTemporaryDir settings;
 #ifndef Q_OS_WIN
     qputenv("XDG_CONFIG_HOME", settings.path().toUtf8());

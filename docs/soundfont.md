@@ -2,7 +2,7 @@
 
 [简体中文](soundfont.zh-CN.md)
 
-OpenKeys Piano does not bundle or automatically download soundfonts. Before playing, prepare an **SF2 soundfont file** and choose **Import Soundfont**. A soundfont supplies the instrument's sound. Without one, you can edit key mappings and open performance files, but cannot produce audio or record yet.
+OpenKeys Piano does not bundle or automatically download soundfonts. Before playing, prepare an **SF2 soundfont file** and choose **Soundfont → Import / Replace Soundfont**. A soundfont supplies the instrument's sound. Without one, you can edit key mappings and open performance files, but cannot produce audio or record yet.
 
 ## 1. Obtain a soundfont
 
@@ -23,10 +23,10 @@ Do not select the archive, an `.sfz` file or a VST plugin's `.dll` / `.vst3`. Re
 
 ## 3. Import in OpenKeys Piano
 
-1. Choose **Import Soundfont**.
+1. Choose **Soundfont → Import / Replace Soundfont**.
 2. Select the extracted `.sf2` file and confirm.
 3. Wait for copying and loading to finish. Large banks take longer; the application displays progress.
-4. Once the soundfont name appears, play with your computer keyboard, or choose **Demo**, then **Play**.
+4. Once the soundfont name appears, play with your computer keyboard, or choose **File → Demo**, then **Play**.
 
 The application saves a copy in its data directory. **After a successful import, you may remove or move the original download.** The managed copy loads automatically next time.
 
@@ -34,7 +34,7 @@ Copying and loading can require substantial disk space and memory. During replac
 
 ## 4. Replace a soundfont
 
-Choose **Import Soundfont** again and select another SF2. Only one current bank is kept: after the new bank loads successfully, settings are updated and the previous managed copy is removed. Original downloads are untouched.
+Choose **Soundfont → Import / Replace Soundfont** again and select another SF2. Only one current bank is kept: after the new bank loads successfully, settings are updated and the previous managed copy is removed. Original downloads are untouched.
 
 If the new file is damaged or unreadable, or storage is full, an error explains the problem and the previous soundfont and settings are preserved. External soundfont paths saved by older versions require one explicit import to create a managed copy.
 
@@ -50,11 +50,11 @@ Check that the download and extraction finished. Download again or try a smaller
 
 **There is no sound after importing.**
 
-Check that the bank name is displayed, master volume is above zero and the system is not muted. Choose the correct output device in **Audio Settings**, then click the keyboard area to focus it. Reopen Audio Settings to reconnect a disconnected device.
+Check that the bank name is displayed, master volume is above zero and the system is not muted. Choose the correct output device in **Output → Audio Settings**, then click the keyboard area to focus it. Reopen Audio Settings to reconnect a disconnected device.
 
 **There are clicks, dropouts or noticeable latency.**
 
-Try a smaller bank. Increase the buffer in **Audio Settings** to reduce dropouts; decreasing it may reduce latency but requires better device performance.
+Try a smaller bank. Increase the buffer in **Output → Audio Settings** to reduce dropouts; decreasing it may reduce latency but requires better device performance.
 
 **The bank does not sound like a piano.**
 
@@ -63,3 +63,5 @@ The current version uses the first preset in the file. Prefer a piano-only SF2.
 **The application asks to import a previously imported bank again.**
 
 The managed copy may have been removed or damaged. Select an SF2 again. External paths recorded by older versions also need one explicit import.
+
+To open EOP files or record and save a performance, see the [EOP / Recording Guide](performance.md), also available from **Help**.
